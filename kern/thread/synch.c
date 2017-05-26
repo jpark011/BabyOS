@@ -87,7 +87,7 @@ sem_destroy(struct semaphore *sem)
         kfree(sem);
 }
 
-void 
+void
 P(struct semaphore *sem)
 {
         KASSERT(sem != NULL);
@@ -158,13 +158,20 @@ lock_create(const char *name)
         }
 
         lock->lk_name = kstrdup(name);
-        if (lock->lk_name == NULL) {
-                kfree(lock);
-                return NULL;
+        lock->spin = kmalloc(sizeof(struct spin));
+        lock->wch = kmalloc(sizeof(struct wchan));
+        lock->owner = kmalloc(sizeof(struct thread));
+        if (lock->lk_name == NULL ||
+            lock->spin == NULL ||
+            lock->wch == NULL ||
+            lock->owner == NULL) {
+          kfree(lock);
+          return NULL;
         }
-        
+
         // add stuff here as needed
-        
+        lock->held = false;
+
         return lock;
 }
 
@@ -174,7 +181,9 @@ lock_destroy(struct lock *lock)
         KASSERT(lock != NULL);
 
         // add stuff here as needed
-        
+        kfree(lock->owner);
+        kfree(lock->wch);
+        kfree(lock->spin);
         kfree(lock->lk_name);
         kfree(lock);
 }
@@ -183,16 +192,33 @@ void
 lock_acquire(struct lock *lock)
 {
         // Write this
+        KASSERT(lock != NULL);
+        KASSERT(!lock_do_i_hold(lock));
 
-        (void)lock;  // suppress warning until code gets written
+        spinlock_acquire(lock->spin);
+        while () {
+          spinlock_release(lock->spin);
+          wchan_sleep(lock->wch);
+          spinlock_acquire(lock->spin);
+        }
+        lock->held = true;
+        lock->owner = curthread;
+        spinlock_release(lock->spin);
+        // (void)lock;  // suppress warning until code gets written
 }
 
 void
 lock_release(struct lock *lock)
 {
         // Write this
+        KASSERT(lock_do_i_hold(lock));
 
-        (void)lock;  // suppress warning until code gets written
+        spinlock_acquire(lock->spin);
+        lock->held = false;
+        lock->owner = NULL;
+        wchan_wakeone(lock->wchan);
+        spinlock_release(lock->spin);
+        // (void)lock;  // suppress warning until code gets written
 }
 
 bool
@@ -200,9 +226,8 @@ lock_do_i_hold(struct lock *lock)
 {
         // Write this
 
-        (void)lock;  // suppress warning until code gets written
-
-        return true; // dummy until code gets written
+        // (void)lock;  // suppress warning until code gets written
+        return lock->held && (lock->thread == curthread); // dummy until code gets written
 }
 
 ////////////////////////////////////////////////////////////
@@ -225,9 +250,9 @@ cv_create(const char *name)
                 kfree(cv);
                 return NULL;
         }
-        
+
         // add stuff here as needed
-        
+
         return cv;
 }
 
@@ -237,7 +262,7 @@ cv_destroy(struct cv *cv)
         KASSERT(cv != NULL);
 
         // add stuff here as needed
-        
+
         kfree(cv->cv_name);
         kfree(cv);
 }
