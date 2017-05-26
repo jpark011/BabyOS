@@ -172,7 +172,7 @@ lock_create(const char *name)
       		return NULL;
       	}
 
-      	spinlock_init(lock->spin);
+      	spinlock_init(&lock->spin);
 
         lock->owner = NULL;
 
@@ -186,7 +186,7 @@ lock_destroy(struct lock *lock)
 
         // add stuff here as needed
         lock->owner = NULL;
-        spinlock_cleanup(lock->spin);
+        spinlock_cleanup(&lock->spin);
       	wchan_destroy(lock->wch);
         kfree(lock->lk_name);
         kfree(lock);
@@ -199,15 +199,15 @@ lock_acquire(struct lock *lock)
         KASSERT(lock != NULL);
         KASSERT(!lock_do_i_hold(lock));
 
-        spinlock_acquire(lock->spin);
+        spinlock_acquire(&lock->spin);
         while (lock->held) {
-          spinlock_release(lock->spin);
+          spinlock_release(&lock->spin);
           wchan_sleep(lock->wch);
-          spinlock_acquire(lock->spin);
+          spinlock_acquire(&lock->spin);
         }
         lock->held = true;
         lock->owner = curthread;
-        spinlock_release(lock->spin);
+        spinlock_release(&lock->spin);
         // (void)lock;  // suppress warning until code gets written
 }
 
@@ -217,11 +217,11 @@ lock_release(struct lock *lock)
         // Write this
         KASSERT(lock_do_i_hold(lock));
 
-        spinlock_acquire(lock->spin);
+        spinlock_acquire(&lock->spin);
         lock->held = false;
         lock->owner = NULL;
         wchan_wakeone(lock->wch);
-        spinlock_release(lock->spin);
+        spinlock_release(&lock->spin);
         // (void)lock;  // suppress warning until code gets written
 }
 
