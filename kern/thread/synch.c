@@ -167,7 +167,7 @@ lock_create(const char *name)
         lock->held = false;
         lock->wch = wchan_create(lock->lk_name);
       	if (lock->wch == NULL) {
-      		kfree(lock->name);
+      		kfree(lock->lk_name);
       		kfree(lock);
       		return NULL;
       	}
@@ -186,8 +186,8 @@ lock_destroy(struct lock *lock)
 
         // add stuff here as needed
         lock->owner = NULL;
-        spinlock_cleanup(sem->spin);
-      	wchan_destroy(sem->wchan);
+        spinlock_cleanup(lock->spin);
+      	wchan_destroy(lock->wch);
         kfree(lock->lk_name);
         kfree(lock);
 }
