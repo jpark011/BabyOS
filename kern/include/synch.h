@@ -78,7 +78,7 @@ struct lock {
         // (don't forget to mark things volatile as needed)
         struct spinlock spin;
         struct wchan* wch;
-        bool held;
+        volatile bool held;
         struct thread* owner;
 };
 
@@ -119,6 +119,7 @@ struct cv {
         char *cv_name;
         // add what you need here
         // (don't forget to mark things volatile as needed)
+        struct wchan* wch;
 };
 
 struct cv *cv_create(const char *name);
