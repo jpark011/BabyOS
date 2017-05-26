@@ -158,19 +158,23 @@ lock_create(const char *name)
         }
 
         lock->lk_name = kstrdup(name);
-        lock->spin = kmalloc(sizeof(struct spin));
-        lock->wch = kmalloc(sizeof(struct wchan));
-        lock->owner = kmalloc(sizeof(struct thread));
-        if (lock->lk_name == NULL ||
-            lock->spin == NULL ||
-            lock->wch == NULL ||
-            lock->owner == NULL) {
+        if (lock->lk_name == NULL) {
           kfree(lock);
           return NULL;
         }
 
         // add stuff here as needed
         lock->held = false;
+        lock->wch = wchan_create(lock->lk_name);
+      	if (lock->wch == NULL) {
+      		kfree(lock->name);
+      		kfree(lock);
+      		return NULL;
+      	}
+
+      	spinlock_init(lock->spin);
+
+        lock->owner = NULL;
 
         return lock;
 }
@@ -181,9 +185,9 @@ lock_destroy(struct lock *lock)
         KASSERT(lock != NULL);
 
         // add stuff here as needed
-        kfree(lock->owner);
-        kfree(lock->wch);
-        kfree(lock->spin);
+        lock->owner = NULL;
+        spinlock_cleanup(sem->spin);
+      	wchan_destroy(sem->wchan);
         kfree(lock->lk_name);
         kfree(lock);
 }
@@ -196,7 +200,7 @@ lock_acquire(struct lock *lock)
         KASSERT(!lock_do_i_hold(lock));
 
         spinlock_acquire(lock->spin);
-        while () {
+        while (lock->held) {
           spinlock_release(lock->spin);
           wchan_sleep(lock->wch);
           spinlock_acquire(lock->spin);
@@ -216,7 +220,7 @@ lock_release(struct lock *lock)
         spinlock_acquire(lock->spin);
         lock->held = false;
         lock->owner = NULL;
-        wchan_wakeone(lock->wchan);
+        wchan_wakeone(lock->wch);
         spinlock_release(lock->spin);
         // (void)lock;  // suppress warning until code gets written
 }
@@ -225,9 +229,9 @@ bool
 lock_do_i_hold(struct lock *lock)
 {
         // Write this
-
+        KASSERT(lock != NULL);
         // (void)lock;  // suppress warning until code gets written
-        return lock->held && (lock->thread == curthread); // dummy until code gets written
+        return lock->held && (lock->owner == curthread); // dummy until code gets written
 }
 
 ////////////////////////////////////////////////////////////
