@@ -102,7 +102,7 @@ intersection_sync_cleanup(void)
     cv_destroy(light);
     array_remove(trafficLights, array_num(trafficLights) - 1;
   }
-
+  array_setsize(trafficLights, 0);
   array_destroy(trafficLights);
 
   /* replace this default implementation with your own implementation */
