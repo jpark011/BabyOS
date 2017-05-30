@@ -72,6 +72,12 @@ intersection_sync_init(void)
   }
   array_add(trafficLights, light, NULL);
 
+  /* replace this default implementation with your own implementation */
+
+  intersectionSem = sem_create("intersectionSem",1);
+  if (intersectionSem == NULL) {
+    panic("could not create intersection semaphore");
+  }
   return;
 }
 
@@ -91,8 +97,8 @@ intersection_sync_cleanup(void)
   KASSERT(intersectionLk != NULL);
   lock_destroy(intersectionLk);
   KASSERT(trafficLights != NULL);
-  for (i=0; i < array_num(trafficLights); i++) {
-    light = array_get(trafficLights, i);
+  for (i=0; (unsigned)i < array_num(trafficLights); i++) {
+    light = array_get(trafficLights, (unsigned)i);
     KASSERT(light != NULL);
     cv_destroy(light);
   }
