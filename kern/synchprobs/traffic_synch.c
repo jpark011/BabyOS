@@ -3,6 +3,7 @@
 #include <synchprobs.h>
 #include <synch.h>
 #include <opt-A1.h>
+#include <array.h>
 
 /*
  * This simple default synchronization mechanism allows only vehicle at a time
@@ -48,25 +49,25 @@ intersection_sync_init(void)
   trafficLights = array_create();
 
   light = cv_create("northLight");
-  if (cv == NULL) {
+  if (light == NULL) {
     panic("could not create traffic light cv");
   }
   array_add(trafficLights, light, NULL);
 
   light = cv_create("southLight");
-  if (cv == NULL) {
+  if (light == NULL) {
     panic("could not create traffic light cv");
   }
   array_add(trafficLights, light, NULL);
 
   light = cv_create("eastLight");
-  if (cv == NULL) {
+  if (light == NULL) {
     panic("could not create traffic light cv");
   }
   array_add(trafficLights, light, NULL);
 
   light = cv_create("westLight");
-  if (cv == NULL) {
+  if (light == NULL) {
     panic("could not create traffic light cv");
   }
   array_add(trafficLights, light, NULL);
