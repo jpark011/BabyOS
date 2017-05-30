@@ -91,18 +91,18 @@ intersection_sync_init(void)
 void
 intersection_sync_cleanup(void)
 {
-  int i;
   struct cv* light;
 
   KASSERT(intersectionLk != NULL);
   lock_destroy(intersectionLk);
   KASSERT(trafficLights != NULL);
-  for (i=0; (unsigned)i < array_num(trafficLights); i++) {
-    light = array_get(trafficLights, (unsigned)i);
+  while (0 < array_num(trafficLights)) {
+    light = array_get(trafficLights, array_num(trafficLights) - 1);
     KASSERT(light != NULL);
     cv_destroy(light);
-    array_remove(trafficLights, (unsigned)i);
+    array_remove(trafficLights, array_num(trafficLights) - 1;
   }
+
   array_destroy(trafficLights);
 
   /* replace this default implementation with your own implementation */
