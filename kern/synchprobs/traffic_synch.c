@@ -4,17 +4,17 @@
 #include <synch.h>
 #include <opt-A1.h>
 
-/* 
+/*
  * This simple default synchronization mechanism allows only vehicle at a time
  * into the intersection.   The intersectionSem is used as a a lock.
  * We use a semaphore rather than a lock so that this code will work even
  * before locks are implemented.
  */
 
-/* 
+/*
  * Replace this default synchronization mechanism with your own (better) mechanism
  * needed for your solution.   Your mechanism may use any of the available synchronzation
- * primitives, e.g., semaphores, locks, condition variables.   You are also free to 
+ * primitives, e.g., semaphores, locks, condition variables.   You are also free to
  * declare other global variables if your solution requires them.
  */
 
@@ -22,28 +22,59 @@
  * replace this with declarations of any synchronization and other variables you need here
  */
 static struct semaphore *intersectionSem;
+// Lock for intersection (critical section)
+static struct lock* intersectionLk;
+// Tell vehicle to stop or go (Conditional Variables)
+static struct array* trafficLights;
 
-
-/* 
+/*
  * The simulation driver will call this function once before starting
  * the simulation
  *
  * You can use it to initialize synchronization and other variables.
- * 
+ *
  */
 void
 intersection_sync_init(void)
 {
-  /* replace this default implementation with your own implementation */
+  // temp
+  struct cv* light;
 
-  intersectionSem = sem_create("intersectionSem",1);
-  if (intersectionSem == NULL) {
-    panic("could not create intersection semaphore");
+  intersectionLk = lock_create("intersectionLk");
+  if (intersectionLk == NULL) {
+    panic("could not create intersection lock");
   }
+
+  trafficLights = array_create();
+
+  cv = cv_create("northLight");
+  if (cv == NULL) {
+    panic("could not create traffic light cv");
+  }
+  array_add(trafficLights, cv_create("northLight"), NULL);
+
+  cv = cv_create("southLight");
+  if (cv == NULL) {
+    panic("could not create traffic light cv");
+  }
+  array_add(trafficLights, cv_create("southLight"), NULL);
+
+  cv = cv_create("eastLight");
+  if (cv == NULL) {
+    panic("could not create traffic light cv");
+  }
+  array_add(trafficLights, cv_create("eastLight"), NULL);
+
+  cv = cv_create("westLight");
+  if (cv == NULL) {
+    panic("could not create traffic light cv");
+  }
+  array_add(trafficLights, cv_create("westLight"), NULL);
+
   return;
 }
 
-/* 
+/*
  * The simulation driver will call this function once after
  * the simulation has finished
  *
@@ -53,6 +84,19 @@ intersection_sync_init(void)
 void
 intersection_sync_cleanup(void)
 {
+  int i;
+  struct cv* light;
+
+  KASSERT(intersectionLk != NULL);
+  lock_destroy(intersectionLk);
+  KASSERT(trafficLights != NULL)
+  for (i=0; i < array_num(trafficLights); i++) {
+    cv = array_get(trafficLights, i);
+    KASSERT(cv != NULL);
+    cv_destroy(cv);
+  }
+  array_destroy(trafficLights);
+
   /* replace this default implementation with your own implementation */
   KASSERT(intersectionSem != NULL);
   sem_destroy(intersectionSem);
@@ -62,7 +106,7 @@ intersection_sync_cleanup(void)
 /*
  * The simulation driver will call this function each time a vehicle
  * tries to enter the intersection, before it enters.
- * This function should cause the calling simulation thread 
+ * This function should cause the calling simulation thread
  * to block until it is OK for the vehicle to enter the intersection.
  *
  * parameters:
@@ -73,7 +117,7 @@ intersection_sync_cleanup(void)
  */
 
 void
-intersection_before_entry(Direction origin, Direction destination) 
+intersection_before_entry(Direction origin, Direction destination)
 {
   /* replace this default implementation with your own implementation */
   (void)origin;  /* avoid compiler complaint about unused parameter */
@@ -95,7 +139,7 @@ intersection_before_entry(Direction origin, Direction destination)
  */
 
 void
-intersection_after_exit(Direction origin, Direction destination) 
+intersection_after_exit(Direction origin, Direction destination)
 {
   /* replace this default implementation with your own implementation */
   (void)origin;  /* avoid compiler complaint about unused parameter */
