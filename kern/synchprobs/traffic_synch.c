@@ -52,11 +52,12 @@ static bool right_turn(MyVehicle* v) {
 static bool check_constraints(MyVehicle* v) {
   KASSERT(v != NULL);
   for (unsigned int i = 0; i < array_num(vehicles); i++) {
-    if (vehicles[i]->origin == v->origin ||
-        ( (vehicles[i]->origin == vehicles[thread_num]->destination) &&
-          (vehicles[i]->destination == vehicles[thread_num]->origin)) ||
-        ( (right_turn(vehicles[i]) || right_turn(vehicles[thread_num])) &&
-          (vehicles[thread_num]->destination != vehicles[i]->destination))) {
+    MyVehicle* vi = array_get(vehicles, i)
+    if (vi->origin == v->origin ||
+        ( (vi->origin == v->destination) &&
+          (vi->destination == v->origin)) ||
+        ( (right_turn(vi) || right_turn(v)) &&
+          (v->destination != vi->destination))) {
       continue;
     } else {
       return false;
