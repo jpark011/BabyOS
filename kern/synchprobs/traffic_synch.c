@@ -223,13 +223,13 @@ intersection_after_exit(Direction origin, Direction destination)
     // found!
     if ((v->origin == origin) && (v->destination == destination)) {
       // Broadcase only affected sides
-      if (origin == north || origin == south) {
+      //if (origin == north || origin == south) {
         cv_broadcast(trafficLights[east], intersectionLk);
         cv_broadcast(trafficLights[west], intersectionLk);
-      } else {
+      //} else {
         cv_broadcast(trafficLights[north], intersectionLk);
         cv_broadcast(trafficLights[south], intersectionLk);
-      }
+      //}
 
       // bye bye
       array_remove(vehicles, i);
