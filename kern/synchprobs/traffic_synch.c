@@ -47,29 +47,29 @@ intersection_sync_init(void)
 
   trafficLights = array_create();
 
-  cv = cv_create("northLight");
+  light = cv_create("northLight");
   if (cv == NULL) {
     panic("could not create traffic light cv");
   }
-  array_add(trafficLights, cv_create("northLight"), NULL);
+  array_add(trafficLights, light, NULL);
 
-  cv = cv_create("southLight");
+  light = cv_create("southLight");
   if (cv == NULL) {
     panic("could not create traffic light cv");
   }
-  array_add(trafficLights, cv_create("southLight"), NULL);
+  array_add(trafficLights, light, NULL);
 
-  cv = cv_create("eastLight");
+  light = cv_create("eastLight");
   if (cv == NULL) {
     panic("could not create traffic light cv");
   }
-  array_add(trafficLights, cv_create("eastLight"), NULL);
+  array_add(trafficLights, light, NULL);
 
-  cv = cv_create("westLight");
+  light = cv_create("westLight");
   if (cv == NULL) {
     panic("could not create traffic light cv");
   }
-  array_add(trafficLights, cv_create("westLight"), NULL);
+  array_add(trafficLights, light, NULL);
 
   return;
 }
@@ -89,11 +89,11 @@ intersection_sync_cleanup(void)
 
   KASSERT(intersectionLk != NULL);
   lock_destroy(intersectionLk);
-  KASSERT(trafficLights != NULL)
+  KASSERT(trafficLights != NULL);
   for (i=0; i < array_num(trafficLights); i++) {
-    cv = array_get(trafficLights, i);
-    KASSERT(cv != NULL);
-    cv_destroy(cv);
+    light = array_get(trafficLights, i);
+    KASSERT(light != NULL);
+    cv_destroy(light);
   }
   array_destroy(trafficLights);
 
