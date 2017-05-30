@@ -28,7 +28,7 @@
    Direction destination;
  } MyVehicle;
 
-static struct semaphore *intersectionSem;
+// static struct semaphore *intersectionSem;
 // Lock for intersection (critical section)
 static struct lock* intersectionLk;
 // Tell vehicle to stop or go (Conditional Variables)
@@ -105,10 +105,10 @@ intersection_sync_init(void)
 
   /* replace this default implementation with your own implementation */
 
-  intersectionSem = sem_create("intersectionSem",1);
-  if (intersectionSem == NULL) {
-    panic("could not create intersection semaphore");
-  }
+  // intersectionSem = sem_create("intersectionSem",1);
+  // if (intersectionSem == NULL) {
+  //   panic("could not create intersection semaphore");
+  // }
   return;
 }
 
@@ -139,8 +139,8 @@ intersection_sync_cleanup(void)
   array_destroy(vehicles);
 
   /* replace this default implementation with your own implementation */
-  KASSERT(intersectionSem != NULL);
-  sem_destroy(intersectionSem);
+  // KASSERT(intersectionSem != NULL);
+  // sem_destroy(intersectionSem);
 }
 
 
