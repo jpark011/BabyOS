@@ -26,7 +26,7 @@ static struct semaphore *intersectionSem;
 // Lock for intersection (critical section)
 static struct lock* intersectionLk;
 // Tell vehicle to stop or go (Conditional Variables)
-static struct array* trafficLights;
+static struct cv* trafficLights[4];
 
 /*
  * The simulation driver will call this function once before starting
@@ -38,39 +38,30 @@ static struct array* trafficLights;
 void
 intersection_sync_init(void)
 {
-  // temp
-  struct cv* light;
-
   intersectionLk = lock_create("intersectionLk");
   if (intersectionLk == NULL) {
     panic("could not create intersection lock");
   }
 
-  trafficLights = array_create();
-
-  light = cv_create("northLight");
-  if (light == NULL) {
+  trafficLights[north] = cv_create("northLight");
+  if (trafficLights[north] == NULL) {
     panic("could not create traffic light cv");
   }
-  array_add(trafficLights, light, NULL);
 
-  light = cv_create("southLight");
-  if (light == NULL) {
+  trafficLights[east] = cv_create("eastLight");
+  if (trafficLights[east] == NULL) {
     panic("could not create traffic light cv");
   }
-  array_add(trafficLights, light, NULL);
 
-  light = cv_create("eastLight");
-  if (light == NULL) {
+  trafficLights[south] = cv_create("southLight");
+  if (trafficLights[south] == NULL) {
     panic("could not create traffic light cv");
   }
-  array_add(trafficLights, light, NULL);
 
-  light = cv_create("westLight");
-  if (light == NULL) {
+  trafficLights[west] = cv_create("westLight");
+  if (trafficLights[west] == NULL) {
     panic("could not create traffic light cv");
   }
-  array_add(trafficLights, light, NULL);
 
   /* replace this default implementation with your own implementation */
 
@@ -95,15 +86,16 @@ intersection_sync_cleanup(void)
 
   KASSERT(intersectionLk != NULL);
   lock_destroy(intersectionLk);
+
   KASSERT(trafficLights != NULL);
-  while (0 < array_num(trafficLights)) {
-    light = array_get(trafficLights, array_num(trafficLights) - 1);
-    KASSERT(light != NULL);
-    cv_destroy(light);
-    array_remove(trafficLights, array_num(trafficLights) - 1);
-  }
-  array_setsize(trafficLights, 0);
-  array_destroy(trafficLights);
+  KASSERT(trafficLights[north] != NULL);
+  cv_destroy(trafficLights[north]);
+  KASSERT(trafficLights[east] != NULL);
+  cv_destroy(trafficLights[east]);
+  KASSERT(trafficLights[south] != NULL);
+  cv_destroy(trafficLights[south]);
+  KASSERT(trafficLights[west] != NULL);
+  cv_destroy(trafficLights[west]);
 
   /* replace this default implementation with your own implementation */
   KASSERT(intersectionSem != NULL);
