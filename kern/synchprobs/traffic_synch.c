@@ -26,7 +26,38 @@ static struct semaphore *intersectionSem;
 // Lock for intersection (critical section)
 static struct lock* intersectionLk;
 // Tell vehicle to stop or go (Conditional Variables)
+// Think like real intersection (each road has its own trafficLight)
 static struct cv* trafficLights[4];
+// Vehicles in the intersection
+static struct array* vehicles;
+
+// private functions
+static bool right_turn(Vehicle*);
+static bool check_constraints(Vehicle*);
+
+static bool right_turn(Vehicle* v) {
+  KASSERT(v != NULL);
+  return (((v->origin == west) && (v->destination == south)) ||
+    ((v->origin == south) && (v->destination == east)) ||
+    ((v->origin == east) && (v->destination == north)) ||
+    ((v->origin == north) && (v->destination == west)));
+}
+
+static bool check_constraints(Vehicle* v) {
+  KASSERT(v != NULL);
+  for (unsigned int i = 0; i < array_num(vehicles); i++) {
+    if (vehicles[i]->origin == v->origin ||
+        ( (vehicles[i]->origin == vehicles[thread_num]->destination) &&
+          (vehicles[i]->destination == vehicles[thread_num]->origin)) ||
+        ( (right_turn(vehicles[i]) || right_turn(vehicles[thread_num])) &&
+          (vehicles[thread_num]->destination != vehicles[i]->destination))) {
+      continue;
+    } else {
+      return false;
+    }
+  }
+  return true;
+}
 
 /*
  * The simulation driver will call this function once before starting
@@ -63,6 +94,8 @@ intersection_sync_init(void)
     panic("could not create traffic light cv");
   }
 
+  vehicles = array_create();
+
   /* replace this default implementation with your own implementation */
 
   intersectionSem = sem_create("intersectionSem",1);
@@ -95,6 +128,9 @@ intersection_sync_cleanup(void)
   KASSERT(trafficLights[west] != NULL);
   cv_destroy(trafficLights[west]);
 
+  KASSERT(vehicles != NULL && array_num(vehicles) == 0);
+  array_destroy(vehicles);
+
   /* replace this default implementation with your own implementation */
   KASSERT(intersectionSem != NULL);
   sem_destroy(intersectionSem);
@@ -117,11 +153,31 @@ intersection_sync_cleanup(void)
 void
 intersection_before_entry(Direction origin, Direction destination)
 {
-  /* replace this default implementation with your own implementation */
-  (void)origin;  /* avoid compiler complaint about unused parameter */
-  (void)destination; /* avoid compiler complaint about unused parameter */
-  KASSERT(intersectionSem != NULL);
-  P(intersectionSem);
+  // /* replace this default implementation with your own implementation */
+  // (void)origin;  /* avoid compiler complaint about unused parameter */
+  // (void)destination; /* avoid compiler complaint about unused parameter */
+  // KASSERT(intersectionSem != NULL);
+  // P(intersectionSem);
+  KASSERT(intersectionLk != NULL);
+  KASSERT(vehicles != NULL);
+  KASSERT(trafficLights[origin] != NULL);
+
+  lock_acquire(intersectionLk);
+
+  Vehicle* v = kmalloc(sizeof(Vehicle));
+  if (v == NULL) {
+    panic("could not create vehicle");
+  }
+  v->origin = origin;
+  v->destination = destination;
+
+  while (!check_constraints(v)) {
+    cv_wait(trafficLights[origin], intersectionLk);
+  }
+  // enter intersection
+  array_add(vehicles, v, NULL);
+
+  lock_release(intersectionLk);
 }
 
 
@@ -139,9 +195,41 @@ intersection_before_entry(Direction origin, Direction destination)
 void
 intersection_after_exit(Direction origin, Direction destination)
 {
-  /* replace this default implementation with your own implementation */
-  (void)origin;  /* avoid compiler complaint about unused parameter */
-  (void)destination; /* avoid compiler complaint about unused parameter */
-  KASSERT(intersectionSem != NULL);
-  V(intersectionSem);
+  // /* replace this default implementation with your own implementation */
+  // (void)origin;  /* avoid compiler complaint about unused parameter */
+  // (void)destination; /* avoid compiler complaint about unused parameter */
+  // KASSERT(intersectionSem != NULL);
+  // V(intersectionSem);
+  KASSERT(intersectionLk != NULL);
+  KASSERT(vehicles != NULL);
+  KASSERT(trafficLights[north] != NULL);
+  KASSERT(trafficLights[east] != NULL);
+  KASSERT(trafficLights[south] != NULL);
+  KASSERT(trafficLights[west] != NULL);
+
+  lock_acquire(intersectionLk);
+
+  // find the vehicle...
+  // is this the best way?? TODO
+  for (unsigned int i = 0; i < array_num(vehicles); i++) {
+    Vehicle* v = array_get(vehicles, i);
+    // found!
+    if ((v->origin == origin) && (v->destination == destination)) {
+      // Broadcase only affected sides
+      if (origin == north || origin == south) {
+        cv_broadcast(rafficLights[east], intersectionLk);
+        cv_broadcast(rafficLights[west], intersectionLk);
+      } else {
+        cv_broadcast(rafficLights[north], intersectionLk);
+        cv_broadcast(rafficLights[south], intersectionLk);
+      }
+
+      // bye bye
+      array_remove(vehicles, i);
+      kfree(v);
+      break;
+    }
+  }
+
+  lock_release(intersectionLk);
 }
