@@ -82,8 +82,6 @@ intersection_sync_init(void)
 void
 intersection_sync_cleanup(void)
 {
-  struct cv* light;
-
   KASSERT(intersectionLk != NULL);
   lock_destroy(intersectionLk);
 
