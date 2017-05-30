@@ -101,6 +101,7 @@ intersection_sync_cleanup(void)
     light = array_get(trafficLights, (unsigned)i);
     KASSERT(light != NULL);
     cv_destroy(light);
+    array_remove(trafficLights, (unsigned)i);
   }
   array_destroy(trafficLights);
 
