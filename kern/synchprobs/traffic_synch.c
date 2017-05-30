@@ -22,6 +22,12 @@
 /*
  * replace this with declarations of any synchronization and other variables you need here
  */
+ typedef struct MyVehicles
+ {
+   Direction origin;
+   Direction destination;
+ } MyVehicle;
+
 static struct semaphore *intersectionSem;
 // Lock for intersection (critical section)
 static struct lock* intersectionLk;
@@ -32,10 +38,10 @@ static struct cv* trafficLights[4];
 static struct array* vehicles;
 
 // private functions
-static bool right_turn(Vehicle*);
-static bool check_constraints(Vehicle*);
+static bool right_turn(MyVehicle* v);
+static bool check_constraints(MyVehicle* v);
 
-static bool right_turn(Vehicle* v) {
+static bool right_turn(MyVehicle* v) {
   KASSERT(v != NULL);
   return (((v->origin == west) && (v->destination == south)) ||
     ((v->origin == south) && (v->destination == east)) ||
@@ -43,7 +49,7 @@ static bool right_turn(Vehicle* v) {
     ((v->origin == north) && (v->destination == west)));
 }
 
-static bool check_constraints(Vehicle* v) {
+static bool check_constraints(MyVehicle* v) {
   KASSERT(v != NULL);
   for (unsigned int i = 0; i < array_num(vehicles); i++) {
     if (vehicles[i]->origin == v->origin ||
@@ -164,7 +170,7 @@ intersection_before_entry(Direction origin, Direction destination)
 
   lock_acquire(intersectionLk);
 
-  Vehicle* v = kmalloc(sizeof(Vehicle));
+  MyVehicle* v = kmalloc(sizeof(MyVehicle));
   if (v == NULL) {
     panic("could not create vehicle");
   }
@@ -212,16 +218,16 @@ intersection_after_exit(Direction origin, Direction destination)
   // find the vehicle...
   // is this the best way?? TODO
   for (unsigned int i = 0; i < array_num(vehicles); i++) {
-    Vehicle* v = array_get(vehicles, i);
+    MyVehicle* v = array_get(vehicles, i);
     // found!
     if ((v->origin == origin) && (v->destination == destination)) {
       // Broadcase only affected sides
       if (origin == north || origin == south) {
-        cv_broadcast(rafficLights[east], intersectionLk);
-        cv_broadcast(rafficLights[west], intersectionLk);
+        cv_broadcast(trafficLights[east], intersectionLk);
+        cv_broadcast(trafficLights[west], intersectionLk);
       } else {
-        cv_broadcast(rafficLights[north], intersectionLk);
-        cv_broadcast(rafficLights[south], intersectionLk);
+        cv_broadcast(trafficLights[north], intersectionLk);
+        cv_broadcast(trafficLights[south], intersectionLk);
       }
 
       // bye bye
