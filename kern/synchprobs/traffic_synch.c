@@ -75,7 +75,7 @@ static bool check_constraints(MyVehicle* v) {
 }
 
 static bool has_right_of_way(MyVehicle *v) {
-  struct MyVehicle* front = q_peek(waitings);
+  struct MyVehicle* front = (MyVehicle*)q_peek(waitings);
   return v == front;
 }
 
