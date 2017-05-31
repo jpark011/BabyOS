@@ -4,6 +4,7 @@
 #include <synch.h>
 #include <opt-A1.h>
 #include <array.h>
+#include <queue.h>
 
 /*
  * This simple default synchronization mechanism allows only vehicle at a time
@@ -36,10 +37,17 @@ static struct lock* intersectionLk;
 static struct cv* trafficLights[4];
 // Vehicles in the intersection
 static struct array* vehicles;
+// Vehicles waiting for traffic signals
+static struct queue* waitings;
+
 
 // private functions
+// is right turn
 static bool right_turn(MyVehicle* v);
+// passes all the conditions
 static bool check_constraints(MyVehicle* v);
+// is in front of the road (queue)
+static bool has_right_of_way(MyVehicle *v);
 
 static bool right_turn(MyVehicle* v) {
   KASSERT(v != NULL);
@@ -65,6 +73,12 @@ static bool check_constraints(MyVehicle* v) {
   }
   return true;
 }
+
+static bool has_right_of_way(MyVehicle *v) {
+  struct MyVehicle* front = q_peek(waitings);
+  return v == front;
+}
+
 
 /*
  * The simulation driver will call this function once before starting
@@ -102,6 +116,17 @@ intersection_sync_init(void)
   }
 
   vehicles = array_create();
+  if (vehicles == NULL) {
+    panic("could not create vehicles");
+
+  }
+
+  // init size is 10 (max # vehicles at a time)
+  waitings = q_create(10);
+  if (waitings == NULL) {
+    panic("could not create waitings");
+
+  }
 
   /* replace this default implementation with your own implementation */
 
@@ -137,6 +162,9 @@ intersection_sync_cleanup(void)
 
   KASSERT(vehicles != NULL && array_num(vehicles) == 0);
   array_destroy(vehicles);
+
+  KASSERT(waitings != NULL);
+  q_destroy(waitings);
 
   /* replace this default implementation with your own implementation */
   // KASSERT(intersectionSem != NULL);
@@ -177,11 +205,13 @@ intersection_before_entry(Direction origin, Direction destination)
   }
   v->origin = origin;
   v->destination = destination;
-
-  while (!check_constraints(v)) {
+  // wait at the line
+  q_addtail(waitings, v);
+  while ( !(check_constraints(v) && has_right_of_way(v)) ) {
     cv_wait(trafficLights[origin], intersectionLk);
   }
   // enter intersection
+  q_remhead(waitings);
   array_add(vehicles, v, NULL);
 
   lock_release(intersectionLk);
