@@ -196,6 +196,7 @@ intersection_before_entry(Direction origin, Direction destination)
   KASSERT(intersectionLk != NULL);
   KASSERT(vehicles != NULL);
   KASSERT(trafficLights[origin] != NULL);
+  KASSERT(waitings != NULL);
 
   lock_acquire(intersectionLk);
 
