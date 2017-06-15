@@ -9,9 +9,42 @@
 #include <thread.h>
 #include <addrspace.h>
 #include <copyinout.h>
+#include "opt-A2.h"
+
 
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
+#if OPT_A2
+int sys_fork(struct trapframe* tf, pid_t* retVal) {
+    int err;
+    // create new proc
+    struct proc* child_p = proc_create_runprogram( strcat(curproc->p_name, "'s child_'") );
+    if (child_p == NULL) {
+      panic("Can't create a new child process!");
+      return ENPROC;
+    }
+
+    // copy mem
+    err = as_copy(curproc_getas(), &child_p->p_addrspace);
+    if (err) {
+      panic("Can't copy process memory to the child!");
+      proc_destroy(child_p);
+      return ENOMEM;
+    }
+
+    // copy trapframe
+    struct trapframe* child_tf = kmalloc(sizeof(struct trapframe));
+    memcpy(child_tf, tf, sizeof(struct trapframe));
+
+    // attach a new thread
+    thread_fork(  strcat(child_p->p_name, "'s main_thread'"),
+                  child_p,
+                  (void*)enter_forked_process, child_tf, 0);
+
+    *retVal = child_p->p_id;
+    return 0;
+}
+#endif // OPT_A2
 
 void sys__exit(int exitcode) {
 
@@ -42,7 +75,7 @@ void sys__exit(int exitcode) {
   /* if this is the last user process in the system, proc_destroy()
      will wake up the kernel menu thread */
   proc_destroy(p);
-  
+
   thread_exit();
   /* thread_exit() does not return, so we should never get here */
   panic("return from thread_exit in sys_exit\n");
@@ -72,7 +105,7 @@ sys_waitpid(pid_t pid,
 
   /* this is just a stub implementation that always reports an
      exit status of 0, regardless of the actual exit status of
-     the specified process.   
+     the specified process.
      In fact, this will return 0 even if the specified process
      is still running, and even if it never existed in the first place.
 
@@ -91,4 +124,3 @@ sys_waitpid(pid_t pid,
   *retval = pid;
   return(0);
 }
-
