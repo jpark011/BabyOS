@@ -49,7 +49,10 @@
 #include <vnode.h>
 #include <vfs.h>
 #include <synch.h>
-#include <kern/fcntl.h>  
+#include <kern/fcntl.h>
+#include <limits.h>
+#include "opt-A2.h"
+
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
@@ -63,11 +66,70 @@ struct proc *kproc;
 /* count of the number of processes, excluding kproc */
 static volatile unsigned int proc_count;
 /* provides mutual exclusion for proc_count */
-/* it would be better to use a lock here, but we use a semaphore because locks are not implemented in the base kernel */ 
+/* it would be better to use a lock here, but we use a semaphore because locks are not implemented in the base kernel */
 static struct semaphore *proc_count_mutex;
 /* used to signal the kernel menu thread when there are no processes */
-struct semaphore *no_proc_sem;   
+struct semaphore *no_proc_sem;
 #endif  // UW
+
+#if OPT_A2
+// definitions of global vars
+struct lock* p_table_lock;
+struct array* p_table;
+struct lock* p_children_lock;
+
+// insert proc into p_table and generate unique
+static pid_t insertProc(struct array* procs, struct proc* p) {
+	unsigned int i = 0;
+	KASSERT(procs != NULL);
+
+	for (i = 0; i <= array_num(procs); i++) {
+		// if at the end of array
+		if (i == array_num(procs)) {
+			array_add(procs, p, NULL);
+			break;
+		}
+
+		struct proc* now = (struct proc*)array_get(procs, i);
+		// if empty block, fill it in
+		if (now == NULL) {
+			array_set(procs, i, p);
+			break;
+		}
+	}
+	// since index is unique, return from the MIN
+	return i + PID_MIN;
+}
+
+// remove a process from procs before it gets destroyed
+// it only NULLifies it
+static void removeProc(struct array* procs, struct proc* p) {
+	KASSERT(procs != NULL);
+	KASSERT(p != NULL);
+	// get index
+	unsigned int i = p->p_id - PID_MIN;
+	// NULLify only
+	array_set(procs, i, NULL);
+}
+
+// return proc corresponding to pid
+// used in wait returns NULL if not found
+struct proc* getProc(struct array* procs, pid_t pid) {
+	KASSERT(procs != NULL);
+	struct proc* ret = NULL;
+
+	for (unsigned int i = 0; i < array_num(procs); i++) {
+		struct proc* now = (struct proc*)array_get(procs, i);
+		if (now != NULL && now->p_id == pid) {
+			ret = now;
+			break;
+		}
+	}
+	return ret;
+}
+
+#endif // OPT_A2
+
 
 
 
@@ -166,6 +228,15 @@ proc_destroy(struct proc *proc)
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
 
+#if OPT_A2
+	KASSERT(proc->p_cv != NULL);
+	cv_destroy(proc->p_cv);
+	lock_destroy(proc->p_cv_lock);
+	lock_acquire(p_table_lock);
+	removeProc(p_table, proc);
+	lock_release(p_table_lock);
+#endif
+
 	kfree(proc->p_name);
 	kfree(proc);
 
@@ -174,7 +245,7 @@ proc_destroy(struct proc *proc)
         /* note: kproc is not included in the process count, but proc_destroy
 	   is never called on kproc (see KASSERT above), so we're OK to decrement
 	   the proc_count unconditionally here */
-	P(proc_count_mutex); 
+	P(proc_count_mutex);
 	KASSERT(proc_count > 0);
 	proc_count--;
 	/* signal the kernel menu thread if the process count has reached zero */
@@ -183,7 +254,7 @@ proc_destroy(struct proc *proc)
 	}
 	V(proc_count_mutex);
 #endif // UW
-	
+
 
 }
 
@@ -193,6 +264,21 @@ proc_destroy(struct proc *proc)
 void
 proc_bootstrap(void)
 {
+#if OPT_A2
+		p_table_lock = lock_create("Master Process Lock");
+		if (p_table_lock == NULL) {
+			panic("could not create p_table_lock!!");
+		}
+		p_table = array_create();
+		if (p_table == NULL) {
+			panic("could not create p_table!!");
+		}
+		p_children_lock = lock_create("Children Process Lock");
+		if (p_children_lock == NULL) {
+			panic("could not create p_children_lock!!");
+		}
+#endif
+
   kproc = proc_create("[kernel]");
   if (kproc == NULL) {
     panic("proc_create for kproc failed\n");
@@ -207,7 +293,12 @@ proc_bootstrap(void)
   if (no_proc_sem == NULL) {
     panic("could not create no_proc_sem semaphore\n");
   }
-#endif // UW 
+#endif // UW
+
+#if OPT_A2
+	// kernel p_id (unique)
+	kproc->p_id = 0;
+#endif
 }
 
 /*
@@ -238,7 +329,7 @@ proc_create_runprogram(const char *name)
 	}
 	kfree(console_path);
 #endif // UW
-	  
+
 	/* VM fields */
 
 	proc->p_addrspace = NULL;
@@ -266,10 +357,32 @@ proc_create_runprogram(const char *name)
 	/* increment the count of processes */
         /* we are assuming that all procs, including those created by fork(),
            are created using a call to proc_create_runprogram  */
-	P(proc_count_mutex); 
+	P(proc_count_mutex);
 	proc_count++;
 	V(proc_count_mutex);
 #endif // UW
+
+#ifdef OPT_A2
+	// parent is to be set in handler later
+	proc->p_pid = 1;
+	// init children
+	proc->p_children = array_create();
+	if (proc->p_children == NULL) {
+		panic("could not create children array");
+	}
+	// init CV
+	proc->p_cv = cv_create(name);
+	// init cv lock
+	proc->p_cv_lock = lock_create(name);
+	// init state ALIVE always
+	proc->p_state = ALIVE;
+	// just random value for exit_Status
+	proc->exit_status = 0;
+	// insert into process table and get unique pid returned
+	lock_acquire(p_table_lock);
+	proc->p_id = insertProc(p_table, proc);
+	lock_release(p_table_lock);
+#endif
 
 	return proc;
 }
@@ -334,7 +447,7 @@ curproc_getas(void)
 {
 	struct addrspace *as;
 #ifdef UW
-        /* Until user processes are created, threads used in testing 
+        /* Until user processes are created, threads used in testing
          * (i.e., kernel threads) have no process or address space.
          */
 	if (curproc == NULL) {

@@ -38,6 +38,9 @@
 
 #include <spinlock.h>
 #include <thread.h> /* required for struct threadarray */
+#include <synch.h>
+#include <array.h>
+#include "opt-A2.h"
 
 struct addrspace;
 struct vnode;
@@ -45,12 +48,22 @@ struct vnode;
 struct semaphore;
 #endif // UW
 
+#if OPT_A2
+// For process states
+typedef enum proc_state {
+	ALIVE,
+	DEAD
+} pstate;
+#endif
+
 /*
  * Process structure.
  */
 struct proc {
 	char *p_name;			/* Name of this process */
+
 	struct spinlock p_lock;		/* Lock for this structure */
+
 	struct threadarray p_threads;	/* Threads in this process */
 
 	/* VM */
@@ -69,6 +82,22 @@ struct proc {
 #endif
 
 	/* add more material here as needed */
+#if OPT_A2
+	pid_t p_id;
+	// points to parent process
+	// DEFAULT: 0?
+ 	pid_t p_pid;
+	// list of children
+	struct array* p_children;
+	// CV for wait & exit (every child is a potential parent)
+	struct cv* p_cv;
+	// lock for cv but do we really need it??
+	struct lock* p_cv_lock;
+	// current state of the process
+	pstate p_state;
+	// when exit, save for parent
+	int exit_status;
+#endif // OPT_A2
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */
@@ -78,6 +107,22 @@ extern struct proc *kproc;
 #ifdef UW
 extern struct semaphore *no_proc_sem;
 #endif // UW
+
+#if OPT_A2
+// master lock for mutual exclusion
+extern struct lock* p_table_lock;
+// array of all processes
+// CREATE: when proc is created
+// DELETE: when proc is safe to be deleted
+extern struct array* p_table;
+// used to lock children of a process
+// e.g. when killing a child and interupted by another proc,
+// this prevents from others killing the child
+extern struct lock* p_children_lock;
+// return proc corresponding to pid
+// used in wait
+struct proc* getProc(struct array* procs, pid_t pid);
+#endif
 
 /* Call once during system startup to allocate data structures. */
 void proc_bootstrap(void);
