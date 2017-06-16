@@ -94,7 +94,9 @@ void sys__exit(int exitcode) {
   // save for parent wait
   p->exit_status = _MKWAIT_EXIT(exitcode);
   // wake up parent
+  lock_acquire(p->p_cv_lock);
   cv_broadcast(p->p_cv, p->p_cv_lock);
+  lock_rlease(p->p_cv_lock);
 
   spinlock_acquire(&p->p_lock);
   // clean up ZOMBIE children (DEAD but allocated)
@@ -104,7 +106,7 @@ void sys__exit(int exitcode) {
     // is ZOMBIE?
     if (child->p_state == DEAD) {
       proc_destroy(child);
-      array_remove(p->p_children, i);
+      // array_remove(p->p_children, i);
       // since p->children is now mutated
       i--;
     }
