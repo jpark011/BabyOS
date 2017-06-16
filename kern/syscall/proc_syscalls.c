@@ -97,6 +97,7 @@ void sys__exit(int exitcode) {
   // wake up parent
   cv_broadcast(p->p_cv, p->p_cv_lock);
 
+  spinlock_acquire(&p->p_lock);
   // clean up ZOMBIE children (DEAD but allocated)
   for (unsigned int i = 0; i < array_num(p->p_children); i++) {
     struct proc* child = array_get(p->p_children, i);
@@ -109,7 +110,7 @@ void sys__exit(int exitcode) {
       i--;
     }
   }
-
+  spinlock_release(&p->p_lock);
 
   // find parent first
   lock_acquire(p_table_lock);
