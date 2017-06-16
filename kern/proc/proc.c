@@ -359,7 +359,7 @@ proc_create_runprogram(const char *name)
 
 #ifdef OPT_A2
 	// parent is to be set in handler later
-	proc->p_parent = 1;
+	proc->p_pid = 1;
 	// init children
 	proc->p_children = array_create();
 	if (proc->p_children == NULL) {
