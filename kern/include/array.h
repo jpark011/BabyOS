@@ -95,6 +95,7 @@ array_num(const struct array *a)
 ARRAYINLINE void *
 array_get(const struct array *a, unsigned index)
 {
+	DEBUG(DB_EXEC, "index: %d, a->num: %d", index, a->num);
 	ARRAYASSERT(index < a->num);
 	return a->v[index];
 }
@@ -141,7 +142,7 @@ array_add(struct array *a, void *val, unsigned *index_ret)
  * in array.c.
  *
  * Example usage in e.g. item.h of some game:
- * 
+ *
  * DECLARRAY_BYTYPE(stringarray, char);
  * DECLARRAY(potion);
  * DECLARRAY(sword);

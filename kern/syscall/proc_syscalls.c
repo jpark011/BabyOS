@@ -22,7 +22,7 @@ int sys_fork(struct trapframe* tf, pid_t* retVal) {
     int err;
     // TODO: Should I save curproc into a var with lock???
     // create new proc
-    struct proc* child_p = proc_create_runprogram( strcat(curproc->p_name, "'s child_'") );
+    struct proc* child_p = proc_create_runprogram(curproc->p_name);
     if (child_p == NULL) {
       panic("Can't create a new child process!");
       return ENPROC;
@@ -46,7 +46,7 @@ int sys_fork(struct trapframe* tf, pid_t* retVal) {
     array_add(curproc->p_children, child_p, NULL);
 
     // attach a new thread
-    err = thread_fork(strcat(child_p->p_name, "'s main_thread'"),
+    err = thread_fork(child_p->p_name),
                       child_p,
                       (void*)enter_forked_process, child_tf, 0);
     if (err) {
