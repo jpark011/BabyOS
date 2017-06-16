@@ -97,9 +97,9 @@ void sys__exit(int exitcode) {
     // is ZOMBIE?
     if (child->p_state == DEAD) {
       proc_destroy(child);
-      // array_remove(p->p_children, i);
+      array_remove(p->p_children, i);
       // since p->children is now mutated
-      // i--;
+      i--;
     }
   }
   // mark proc as dead
