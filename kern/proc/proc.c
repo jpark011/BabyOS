@@ -148,7 +148,7 @@ proc_create(const char *name)
 	}
 
 	threadarray_init(&proc->p_threads);
-	proc->p_lock = lock_create(name);
+	spinlock_init(&proc->p_lock);
 
 	/* VM fields */
 	proc->p_addrspace = NULL;
@@ -221,14 +221,15 @@ proc_destroy(struct proc *proc)
 #endif // UW
 
 	threadarray_cleanup(&proc->p_threads);
-	lock_destroy(proc->p_lock);
+	spinlock_cleanup(&proc->p_lock);
 
 #if OPT_A2
 	KASSERT(proc->p_cv != NULL);
 	cv_destroy(proc->p_cv);
-	lock_acquire(p_table_lock);
+	lock_destroy(proc->p_cv_lock);
+	spinlock_acquire(&p_table_lock);
 	removeProc(p_table, proc);
-	lock_release(p_table_lock);
+	spinlock_release(&p_table_lock);
 #endif
 
 	kfree(proc->p_name);
@@ -335,12 +336,12 @@ proc_create_runprogram(const char *name)
 		proc->p_cwd = curproc->p_cwd;
 	}
 #else // UW
-	lock_acquire(curproc->p_lock);
+	spinlock_acquire(&curproc->p_lock);
 	if (curproc->p_cwd != NULL) {
 		VOP_INCREF(curproc->p_cwd);
 		proc->p_cwd = curproc->p_cwd;
 	}
-	lock_release(curproc->p_lock);
+	spinlock_release(&curproc->p_lock);
 #endif // UW
 
 #ifdef UW
@@ -362,14 +363,16 @@ proc_create_runprogram(const char *name)
 	}
 	// init CV
 	proc->p_cv = cv_create(name);
+	// init cv lock
+	proc->p_cv_lock = lock_create(name);
 	// init state ALIVE always
 	proc->p_state = ALIVE;
 	// just random value for exit_Status
 	proc->exit_status = 0;
 	// insert into process table and get unique pid returned
-	lock_acquire(p_table_lock);
+	spinlock_acquire(&p_table_lock);
 	proc->p_id = insertProc(p_table, proc);
-	lock_release(p_table_lock);
+	spinlock_release(&p_table_lock);
 #endif
 
 	return proc;
@@ -386,9 +389,9 @@ proc_addthread(struct proc *proc, struct thread *t)
 
 	KASSERT(t->t_proc == NULL);
 
-	lock_acquire(proc->p_lock);
+	spinlock_acquire(&proc->p_lock);
 	result = threadarray_add(&proc->p_threads, t, NULL);
-	lock_release(proc->p_lock);
+	spinlock_release(&proc->p_lock);
 	if (result) {
 		return result;
 	}
@@ -409,19 +412,19 @@ proc_remthread(struct thread *t)
 	proc = t->t_proc;
 	KASSERT(proc != NULL);
 
-	lock_acquire(proc->p_lock);
+	spinlock_acquire(&proc->p_lock);
 	/* ugh: find the thread in the array */
 	num = threadarray_num(&proc->p_threads);
 	for (i=0; i<num; i++) {
 		if (threadarray_get(&proc->p_threads, i) == t) {
 			threadarray_remove(&proc->p_threads, i);
-			lock_release(proc->p_lock);
+			spinlock_release(&proc->p_lock);
 			t->t_proc = NULL;
 			return;
 		}
 	}
 	/* Did not find it. */
-	lock_release(proc->p_lock);
+	spinlock_release(&proc->p_lock);
 	panic("Thread (%p) has escaped from its process (%p)\n", t, proc);
 }
 
@@ -443,9 +446,9 @@ curproc_getas(void)
 	}
 #endif
 
-	lock_acquire(curproc->p_lock);
+	spinlock_acquire(&curproc->p_lock);
 	as = curproc->p_addrspace;
-	lock_release(curproc->p_lock);
+	spinlock_release(&curproc->p_lock);
 	return as;
 }
 
@@ -459,9 +462,9 @@ curproc_setas(struct addrspace *newas)
 	struct addrspace *oldas;
 	struct proc *proc = curproc;
 
-	lock_acquire(proc->p_lock);
+	spinlock_acquire(&proc->p_lock);
 	oldas = proc->p_addrspace;
 	proc->p_addrspace = newas;
-	lock_release(proc->p_lock);
+	spinlock_release(&proc->p_lock);
 	return oldas;
 }

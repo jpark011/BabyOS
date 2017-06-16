@@ -178,13 +178,13 @@ sys_waitpid(pid_t pid,
     return ECHILD;
   }
 
-  lock_acquire(p_table_lock);
+  lock_acquire(child->p_cv_lock);
   // child has NOT exited (still running...)
   while (child->p_state == ALIVE) {
-    cv_wait(child->p_cv, p_table_lock);
+    cv_wait(child->p_cv, child->p_cv_lock);
   }
   exitstatus = child->exit_status;
-  lock_release(p_table_lock);
+  lock_release(child->p_cv_lock);
 #else
   /* for now, just pretend the exitstatus is 0 */
   exitstatus = 0;

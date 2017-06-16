@@ -36,6 +36,7 @@
  * Note: curproc is defined by <current.h>.
  */
 
+#include <spinlock.h>
 #include <thread.h> /* required for struct threadarray */
 #include <synch.h>
 #include <array.h>
@@ -60,11 +61,9 @@ typedef enum proc_state {
  */
 struct proc {
 	char *p_name;			/* Name of this process */
-#if OPT_A2
-	struct lock* p_lock;
-#else
+
 	struct spinlock p_lock;		/* Lock for this structure */
-#endif
+
 	struct threadarray p_threads;	/* Threads in this process */
 
 	/* VM */
@@ -92,6 +91,8 @@ struct proc {
 	struct array* p_children;
 	// CV for wait & exit (every child is a potential parent)
 	struct cv* p_cv;
+	// lock for cv but do we really need it??
+	struct lock* p_cv_lock;
 	// current state of the process
 	pstate p_state;
 	// when exit, save for parent
