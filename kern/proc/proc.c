@@ -227,9 +227,9 @@ proc_destroy(struct proc *proc)
 	KASSERT(proc->p_cv != NULL);
 	cv_destroy(proc->p_cv);
 	lock_destroy(proc->p_cv_lock);
-	spinlock_acquire(&p_table_lock);
+	lock_acquire(p_table_lock);
 	removeProc(p_table, proc);
-	spinlock_release(&p_table_lock);
+	lock_release(p_table_lock);
 #endif
 
 	kfree(proc->p_name);
@@ -370,9 +370,9 @@ proc_create_runprogram(const char *name)
 	// just random value for exit_Status
 	proc->exit_status = 0;
 	// insert into process table and get unique pid returned
-	spinlock_acquire(&p_table_lock);
+	lock_acquire(p_table_lock);
 	proc->p_id = insertProc(p_table, proc);
-	spinlock_release(&p_table_lock);
+	lock_release(p_table_lock);
 #endif
 
 	return proc;
