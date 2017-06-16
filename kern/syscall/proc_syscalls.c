@@ -90,7 +90,6 @@ void sys__exit(int exitcode) {
 
 #if OPT_A2
 
-  lock_acquire(p->p_cv_lock);
   // mark proc as dead
   p->p_state = DEAD;
   // save for parent wait
@@ -98,7 +97,7 @@ void sys__exit(int exitcode) {
   // wake up parent
   cv_broadcast(p->p_cv, p->p_cv_lock);
 
-
+  lock_acquire(p->p_cv_lock);
   // clean up ZOMBIE children (DEAD but allocated)
   for (unsigned int i = 0; i < array_num(p->p_children); i++) {
     struct proc* child = array_get(p->p_children, i);
