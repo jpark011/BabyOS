@@ -93,6 +93,8 @@ void sys__exit(int exitcode) {
   p->p_state = DEAD;
   // save for parent wait
   p->exit_status = _MKWAIT_EXIT(exitcode);
+  // wake up parent
+  cv_broadcast(p->p_cv, p->p_cv_lock);
 
   spinlock_acquire(&p->p_lock);
   // clean up ZOMBIE children (DEAD but allocated)
