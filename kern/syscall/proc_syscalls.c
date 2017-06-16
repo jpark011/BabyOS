@@ -105,7 +105,7 @@ void sys__exit(int exitcode) {
   // parent NOT in the p_table
   if (parent == NULL) {
     // now its pid is reusable
-    array_add(reusable_pids, p->p_id, NULL);
+    array_add(reusable_pids, (intptr_t)p->p_id, NULL);
     // remove from p_table and destroy
     array_remove(p_table, getIndex(p_table, p->p_id));
     kfree(p_info);
@@ -117,7 +117,7 @@ void sys__exit(int exitcode) {
   }
   // clean up children
   for (unsigned int i=0; i < array_num(p_table); i++) {
-    struct proc_info* child = (proc_info*)array_get(p_table, i);
+    struct proc_info* child = (struct proc_info*)array_get(p_table, i);
     // if the child is my child and a ZOMBIE we clean up
     if (child->state == ZOMBIE && child->pp_id == p->p_id) {
       array_remove(p_table, i);
