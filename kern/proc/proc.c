@@ -119,7 +119,7 @@ struct proc* getProc(struct array* procs, pid_t pid) {
 
 	for (unsigned int i = 0; i < array_num(procs); i++) {
 		struct proc* now = (struct proc*)array_get(procs, i);
-		if (now->p_id == pid) {
+		if (now != NULL && now->p_id == pid) {
 			ret = now;
 			break;
 		}
