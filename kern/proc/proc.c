@@ -50,6 +50,7 @@
 #include <vfs.h>
 #include <synch.h>
 #include <kern/fcntl.h>
+#include <limits.h>
 #include "opt-A2.h"
 
 
@@ -71,7 +72,28 @@ static struct semaphore *proc_count_mutex;
 struct semaphore *no_proc_sem;
 #endif  // UW
 
+#if OPT_A2
+// Global counter for pid
+pid_t unique_pid;
+#endif // OPT_A2
 
+
+// generate unique & reusable pid
+pid_t generatePid() {
+	pid_t ret;
+	KASSERT(reusable_pids != NULL);
+
+	// no usable?
+	if (array_num(reusable_pids) == 0) {
+		ret = unique_pid;
+		unique_pid++;
+	} else {
+		ret = array_get(reusable_pids, 0);
+		array_remove(reusable_pids, 0);
+	}
+
+	return ret;
+}
 
 /*
  * Create a proc structure.
@@ -168,6 +190,11 @@ proc_destroy(struct proc *proc)
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
 
+#if OPT_A2
+	KASSERT(proc->p_cv != NULL);
+	cv_destroy(proc->p_cv);
+#endif
+
 	kfree(proc->p_name);
 	kfree(proc);
 
@@ -195,6 +222,24 @@ proc_destroy(struct proc *proc)
 void
 proc_bootstrap(void)
 {
+#if OPT_A2
+		// set up necessary globals
+		unique_pid = PID_MIN;
+
+		p_lock = lock_create("Master Process Lock");
+		if (p_lock == NULL) {
+			panic("could not create p_lock!!");
+		}
+		p_table = array_create();
+		if (p_table == NULL) {
+			panic("could not create p_table!!");
+		}
+		reusable_pids = array_create();
+		if (reusable_pids == NULL) {
+			panic("could not create reusable_pids!");
+		}
+#endif
+
   kproc = proc_create("[kernel]");
   if (kproc == NULL) {
     panic("proc_create for kproc failed\n");
@@ -210,6 +255,11 @@ proc_bootstrap(void)
     panic("could not create no_proc_sem semaphore\n");
   }
 #endif // UW
+
+#if OPT_A2
+	// kernel p_id (unique)
+	kproc->p_id = 0;
+#endif
 }
 
 /*
@@ -269,12 +319,31 @@ proc_create_runprogram(const char *name)
         /* we are assuming that all procs, including those created by fork(),
            are created using a call to proc_create_runprogram  */
 	P(proc_count_mutex);
-#if OPT_A2
-	proc->p_id = (pid_t)(proc_count + PID_MIN);
-#endif // OPT_A2
 	proc_count++;
 	V(proc_count_mutex);
 #endif // UW
+
+#ifdef OPT_A2
+	// TODO: should this be in runprogram???
+	// set current process as parent
+	proc->p_parent = curproc;
+	// ME for global access
+	spinlock_acquire(p_lock);
+	proc->p_id = generatePid();
+	spinlock_release(p_lock);
+
+	// init CV
+	proc->p_cv = cv_create(name);
+
+	// create proc_info to track its status
+	struct proc_info* proc_info = kmalloc(sizeof(struct proc_info));
+	proc_info->p_id = proc->p_id;
+	proc_info->pp_id = 0;					// just placeholder
+	proc_info->exit_status = 0;		// TODO: what should init value?
+	proc_info->state = ALIVE;
+	proc_info->p_cv = proc_cv;
+	array_add(p_table, proc_info, NULL);
+#endif
 
 	return proc;
 }

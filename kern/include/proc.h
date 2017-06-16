@@ -38,6 +38,8 @@
 
 #include <spinlock.h>
 #include <thread.h> /* required for struct threadarray */
+#include <synch.h>
+#include <array.h>
 #include "opt-A2.h"
 
 struct addrspace;
@@ -72,6 +74,11 @@ struct proc {
 	/* add more material here as needed */
 #if OPT_A2
 	pid_t p_id;
+	// points to parent process
+	// if parent, NULL (only set in fork() )
+	struct proc* p_parent;
+	// CV for wait & exit (every child is a potential parent)
+	struct cv* p_cv;
 #endif // OPT_A2
 };
 
@@ -82,6 +89,39 @@ extern struct proc *kproc;
 #ifdef UW
 extern struct semaphore *no_proc_sem;
 #endif // UW
+
+#if OPT_A2
+// For process states
+typedef enum proc_state {
+	ALIVE,
+	ZOMBIE,
+	DEAD
+} pstate;
+
+// PCB: process tracer
+struct proc_info {
+	// parent id
+	pid_t p_id;
+	// parent process id
+	pid_t pp_id;
+	// exit status
+	int exit_status;
+	// state
+	pstate state;
+	// pointer to cv...bad way! (needed for waitpid)
+	struct cv* p_cv;
+};
+
+// master lock for mutual exclusion
+extern struct lock* p_lock;
+// When used pid is returned
+extern struct array* reusable_pids;
+// array of all processes' proc info
+// CREATE: when proc is created
+// DELETE: when proc is safe to be forgotten
+//         (NOT deleted when proc is destroyed!)
+extern struct array* p_table;
+#endif
 
 /* Call once during system startup to allocate data structures. */
 void proc_bootstrap(void);

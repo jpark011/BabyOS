@@ -185,5 +185,17 @@ syscall(struct trapframe *tf)
 void
 enter_forked_process(struct trapframe *tf)
 {
-	(void)tf;
+#if OPT_A2
+	struct trapframe local_tf = *tf;
+	// child returns 0
+	local_tf.tf_v0 = 0;
+	// error code... why?
+	local_tf.tf_a3 = 0;
+	// PC increment.. but why??
+	local_tf.tf_epc += 4;
+	// return to user mode
+	mips_usermode(&local_tf);
+#else
+	(void)tf
+#endif
 }
