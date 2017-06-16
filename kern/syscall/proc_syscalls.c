@@ -74,7 +74,7 @@ int sys_fork(struct trapframe* tf, pid_t* retVal) {
     // relate to parent
     child_p->p_parent = curproc;
     // relate to children
-    array_add(curproc->children, child_p);
+    array_add(curproc->p_children, child_p, NULL);
 
     // attach a new thread
     err = thread_fork(strcat(child_p->p_name, "'s main_thread'"),
@@ -119,26 +119,26 @@ void sys__exit(int exitcode) {
 
 #if OPT_A2
   // mark proc as dead
-  p->state = DEAD;
+  p->p_state = DEAD;
   // save for parent wait
   p->exit_status = _MKWAIT_EXIT(exitcode);
 
   // clean up ZOMBIE children (DEAD but allocated)
-  for (unsigned int i = 0; i < array_num(p->children); i++) {
+  for (unsigned int i = 0; i < array_num(p->p_children); i++) {
     lock_acquire(p_table_lock);
     struct proc* child = array_get(p_table, i);
     lock_release(p_table_lock);
 
     // is ZOMBIE?
-    if (child->state == DEAD) {
+    if (child->p_state == DEAD) {
       proc_destroy(child);
-      array_remove(p->children, i);
+      array_remove(p->p_children, i);
       // since p->children is now mutated
       i--;
     }
   }
   // self destruct only when parent DNE or DEAD
-  if (p->p_parent == NULL || p->p_parent->state == DEAD) {
+  if (p->p_parent == NULL || p->p_parent->p_state == DEAD) {
     proc_destroy(p);
   }
 #else
@@ -211,7 +211,7 @@ sys_waitpid(pid_t pid,
 
   lock_acquire(p_table_lock);
   // child has NOT exited (still running...)
-  while (child->state == ALIVE) {
+  while (child->p_state == ALIVE) {
     cv_wait(child->p_cv, p_table_lock);
   }
   exitstatus = child->exit_status;
