@@ -73,6 +73,10 @@ struct semaphore *no_proc_sem;
 #endif  // UW
 
 #if OPT_A2
+// definitions of global vars
+struct lock* p_table_lock;
+struct array* p_table;
+
 // insert proc into p_table and generate unique
 static pid_t insertProc(struct array* procs, struct proc* p) {
 	unsigned int i = 0;
