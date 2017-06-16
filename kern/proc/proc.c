@@ -79,7 +79,7 @@ pid_t unique_pid;
 
 
 // generate unique & reusable pid
-pid_t generatePid() {
+static pid_t generatePid() {
 	pid_t ret;
 	KASSERT(reusable_pids != NULL);
 
@@ -88,7 +88,7 @@ pid_t generatePid() {
 		ret = unique_pid;
 		unique_pid++;
 	} else {
-		ret = array_get(reusable_pids, 0);
+		ret = (int)array_get(reusable_pids, 0);
 		array_remove(reusable_pids, 0);
 	}
 
@@ -328,9 +328,9 @@ proc_create_runprogram(const char *name)
 	// set current process as parent
 	proc->p_parent = curproc;
 	// ME for global access
-	spinlock_acquire(p_lock);
+	lock_acquire(p_lock);
 	proc->p_id = generatePid();
-	spinlock_release(p_lock);
+	lock_release(p_lock);
 
 	// init CV
 	proc->p_cv = cv_create(name);
@@ -341,7 +341,7 @@ proc_create_runprogram(const char *name)
 	proc_info->pp_id = 0;					// just placeholder
 	proc_info->exit_status = 0;		// TODO: what should init value?
 	proc_info->state = ALIVE;
-	proc_info->p_cv = proc_cv;
+	proc_info->p_cv = proc->p_cv;
 	array_add(p_table, proc_info, NULL);
 #endif
 

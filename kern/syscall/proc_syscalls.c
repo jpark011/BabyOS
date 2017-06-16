@@ -10,7 +10,7 @@
 #include <thread.h>
 #include <addrspace.h>
 #include <copyinout.h>
-#include <wait.h>
+#include <kern/wait.h>
 #include "opt-A2.h"
 
 
@@ -19,6 +19,7 @@
 #if OPT_A2
 
 // return proc_info OR NULL if not found
+static
 struct proc_info* findProcInfo(struct array* proc_infos, pid_t pid) {
   struct proc_info* ret = NULL;
 
@@ -33,6 +34,7 @@ struct proc_info* findProcInfo(struct array* proc_infos, pid_t pid) {
 }
 
 // return index of (proc_info) or -1 if not found
+static
 int getIndex(struct array* proc_infos, pid_t pid) {
   int ret = -1;
 
