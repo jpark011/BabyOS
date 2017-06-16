@@ -148,7 +148,7 @@ proc_create(const char *name)
 	}
 
 	threadarray_init(&proc->p_threads);
-	lock_init(&proc->p_lock);
+	proc->p_lock = lock_create(name);
 
 	/* VM fields */
 	proc->p_addrspace = NULL;
@@ -409,7 +409,7 @@ proc_remthread(struct thread *t)
 	proc = t->t_proc;
 	KASSERT(proc != NULL);
 
-	lock_acquire(&proc->p_lock);
+	lock_acquire(proc->p_lock);
 	/* ugh: find the thread in the array */
 	num = threadarray_num(&proc->p_threads);
 	for (i=0; i<num; i++) {
@@ -421,7 +421,7 @@ proc_remthread(struct thread *t)
 		}
 	}
 	/* Did not find it. */
-	lock_release(&proc->p_lock);
+	lock_release(proc->p_lock);
 	panic("Thread (%p) has escaped from its process (%p)\n", t, proc);
 }
 
