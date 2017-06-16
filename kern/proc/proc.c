@@ -84,7 +84,7 @@ static pid_t insertProc(struct array* procs, struct proc* p) {
 
 	for (i = 0; i <= array_num(procs); i++) {
 		// if at the end of array
-		if (i == (array_num(procs) - 1)) {
+		if (i == array_num(procs)) {
 			array_add(procs, p, NULL);
 			break;
 		}
