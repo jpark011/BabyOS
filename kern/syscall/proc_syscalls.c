@@ -71,11 +71,10 @@ int sys_fork(struct trapframe* tf, pid_t* retVal) {
     struct trapframe* child_tf = kmalloc(sizeof(struct trapframe));
     memcpy(child_tf, tf, sizeof(struct trapframe));
 
-    // set parent relationship
-    lock_acquire(p_lock);
-    struct proc_info* p_info = findProcInfo(p_table, child_p->p_id);
-    p_info->pp_id = curproc->p_id;
-    lock_release(p_lock);
+    // relate to parent
+    child_p->p_parent = curproc;
+    // relate to children
+    array_add(curproc->children, child_p);
 
     // attach a new thread
     err = thread_fork(strcat(child_p->p_name, "'s main_thread'"),
@@ -96,42 +95,9 @@ void sys__exit(int exitcode) {
   struct addrspace *as;
   struct proc *p = curproc;
 
-#if OPT_A2
-  lock_acquire(p_lock);
-
-  struct proc_info* p_info = findProcInfo(p_table, p->p_id);
-  struct proc_info* parent = findProcInfo(p_table, p_info->pp_id);
-
-  // parent NOT in the p_table
-  if (parent == NULL) {
-    // now its pid is reusable
-    array_add(reusable_pids, (intptr_t)p->p_id, NULL);
-    // remove from p_table and destroy
-    array_remove(p_table, getIndex(p_table, p->p_id));
-    kfree(p_info);
-  // there is parent interested in you!
-  } else {
-    p_info->state = ZOMBIE;
-    p_info->exit_status = _MKWAIT_EXIT(exitcode);
-    cv_broadcast(p->p_cv, p_lock);
-  }
-  // clean up children
-  for (unsigned int i=0; i < array_num(p_table); i++) {
-    struct proc_info* child = (struct proc_info*)array_get(p_table, i);
-    // if the child is my child and a ZOMBIE we clean up
-    if (child->state == ZOMBIE && child->pp_id == p->p_id) {
-      array_remove(p_table, i);
-      kfree(child);
-    }
-  }
-
-  lock_release(p_lock);
-
-#else
   /* for now, just include this to keep the compiler from complaining about
      an unused variable */
   (void)exitcode;
-#endif
 
   DEBUG(DB_SYSCALL,"Syscall: _exit(%d)\n",exitcode);
 
@@ -151,10 +117,35 @@ void sys__exit(int exitcode) {
   /* note: curproc cannot be used after this call */
   proc_remthread(curthread);
 
+#if OPT_A2
+  // mark proc as dead
+  p->state = DEAD;
+  // save for parent wait
+  p->exit_status = _MKWAIT_EXIT(exitcode);
+
+  // clean up ZOMBIE children (DEAD but allocated)
+  for (unsigned int i = 0; i < array_num(p->children); i++) {
+    lock_acquire(p_table_lock);
+    struct proc* child = array_get(p_table, i);
+    lock_release(p_table_lock);
+
+    // is ZOMBIE?
+    if (child->state == DEAD) {
+      proc_destroy(child);
+      array_remove(p->children, i);
+      // since p->children is now mutated
+      i--;
+    }
+  }
+  // self destruct only when parent DNE or DEAD
+  if (p->p_parent == NULL || p->p_parent->state == DEAD) {
+    proc_destroy(p);
+  }
+#else
   /* if this is the last user process in the system, proc_destroy()
      will wake up the kernel menu thread */
   proc_destroy(p);
-
+#endif
   thread_exit();
   /* thread_exit() does not return, so we should never get here */
   panic("return from thread_exit in sys_exit\n");
@@ -205,26 +196,26 @@ sys_waitpid(pid_t pid,
     return EFAULT;
   }
 
-  lock_acquire(p_lock);
-  struct proc_info* found = findProcInfo(p_table, pid);
-  lock_release(p_lock);
+  lock_acquire(p_table_lock);
+  struct proc* child = getProc(p_table, pid);
+  lock_release(p_table_lock);
 
-  if (found == NULL) {
+  if (child == NULL) {
     panic("no such process exists!");
     return ESRCH;
     // TODO: can we just compare curproc == found->parent??
-  } else if (curproc->p_id != found->pp_id) {
+  } else if (curproc != child->p_parent) {
     panic("no child exists!");
     return ECHILD;
   }
 
-  lock_acquire(p_lock);
+  lock_acquire(p_table_lock);
   // child has NOT exited (still running...)
-  while (found->state == ALIVE) {
-    cv_wait(found->p_cv, p_lock);
+  while (child->state == ALIVE) {
+    cv_wait(child->p_cv, p_table_lock);
   }
-  exitstatus = found->exit_status;
-  lock_release(p_lock);
+  exitstatus = child->exit_status;
+  lock_release(p_table_lock);
 #else
   /* for now, just pretend the exitstatus is 0 */
   exitstatus = 0;

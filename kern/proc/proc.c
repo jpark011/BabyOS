@@ -73,27 +73,61 @@ struct semaphore *no_proc_sem;
 #endif  // UW
 
 #if OPT_A2
-// Global counter for pid
-pid_t unique_pid;
+// insert proc into p_table and generate unique
+static pid_t insertProc(struct array* procs, struct proc* p) {
+	unsigned int i = 0;
+	KASSERT(procs != NULL);
+
+	for (i = 0; i <= array_num(procs); i++) {
+		// if at the end of array
+		if (i == (array_num(procs) - 1)) {
+			array_add(procs, proc, NULL);
+			break;
+		}
+
+		struct proc* now = (struct proc*)array_get(procs, i);
+		// if empty block, fill it in
+		if (now == NULL) {
+			array_set(procs, i, proc);
+			break;
+		}
+	}
+	// since index is unique, return from the MIN
+	return i + PID_MIN;
+}
+
+// remove a process from procs before it gets destroyed
+// it only NULLifies it
+static void removeProc(struct array* procs, struct proc* p) {
+	KASSERT(procs != NULL);
+	KASSERT(p != NULL);
+	// get index
+	unsigned int i = p->p_id - PID_MIN;
+	KASSERT(0 <= i && i <= array_num(procs));
+	// NULLify only
+	array_set(procs, i, NULL);
+}
+
+// return proc corresponding to pid
+// used in wait returns NULL if not found
+struct proc* getProc(struct array* procs, pid_t pid) {
+	KASSERT(procs != NULL);
+	struct proc* ret = NULL;
+
+	for (unsigned int i = 0; i < array_num(procs); i++) {
+		struct proc* now = (struct proc*)array_get(procs, i);
+		if (now->p_id == pid) {
+			ret = now;
+			break;
+		}
+	}
+	return ret;
+}
+
 #endif // OPT_A2
 
 
-// generate unique & reusable pid
-static pid_t generatePid() {
-	pid_t ret;
-	KASSERT(reusable_pids != NULL);
 
-	// no usable?
-	if (array_num(reusable_pids) == 0) {
-		ret = unique_pid;
-		unique_pid++;
-	} else {
-		ret = (int)array_get(reusable_pids, 0);
-		array_remove(reusable_pids, 0);
-	}
-
-	return ret;
-}
 
 /*
  * Create a proc structure.
@@ -193,6 +227,9 @@ proc_destroy(struct proc *proc)
 #if OPT_A2
 	KASSERT(proc->p_cv != NULL);
 	cv_destroy(proc->p_cv);
+	lock_acquire(p_table_lock);
+	removeProc(p_table, proc);
+	lock_release(p_table_lock);
 #endif
 
 	kfree(proc->p_name);
@@ -223,20 +260,13 @@ void
 proc_bootstrap(void)
 {
 #if OPT_A2
-		// set up necessary globals
-		unique_pid = PID_MIN;
-
-		p_lock = lock_create("Master Process Lock");
-		if (p_lock == NULL) {
-			panic("could not create p_lock!!");
+		p_table_lock = lock_create("Master Process Lock");
+		if (p_table_lock == NULL) {
+			panic("could not create p_table_lock!!");
 		}
 		p_table = array_create();
 		if (p_table == NULL) {
 			panic("could not create p_table!!");
-		}
-		reusable_pids = array_create();
-		if (reusable_pids == NULL) {
-			panic("could not create reusable_pids!");
 		}
 #endif
 
@@ -324,25 +354,23 @@ proc_create_runprogram(const char *name)
 #endif // UW
 
 #ifdef OPT_A2
-	// TODO: should this be in runprogram???
-	// set current process as parent
-	proc->p_parent = curproc;
-	// ME for global access
-	lock_acquire(p_lock);
-	proc->p_id = generatePid();
-	lock_release(p_lock);
-
+	// parent is to be set in handler later
+	proc->p_parent = NULL;
+	// init children
+	proc->p_children = array_create();
+	if (proc->p_children == NULL) {
+		panic("could not create children array");
+	}
 	// init CV
 	proc->p_cv = cv_create(name);
-
-	// create proc_info to track its status
-	struct proc_info* proc_info = kmalloc(sizeof(struct proc_info));
-	proc_info->p_id = proc->p_id;
-	proc_info->pp_id = 0;					// just placeholder
-	proc_info->exit_status = 0;		// TODO: what should init value?
-	proc_info->state = ALIVE;
-	proc_info->p_cv = proc->p_cv;
-	array_add(p_table, proc_info, NULL);
+	// init state ALIVE always
+	proc->p_state = ALIVE;
+	// just random value for exit_Status
+	proc->exit_status = 0;
+	// insert into process table and get unique pid returned
+	lock_acquire(p_table_lock);
+	proc->p_id = insertProc(p_table, proc);
+	lock_release(p_table_lock);
 #endif
 
 	return proc;

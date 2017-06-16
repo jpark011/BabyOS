@@ -36,7 +36,6 @@
  * Note: curproc is defined by <current.h>.
  */
 
-#include <spinlock.h>
 #include <thread.h> /* required for struct threadarray */
 #include <synch.h>
 #include <array.h>
@@ -48,12 +47,24 @@ struct vnode;
 struct semaphore;
 #endif // UW
 
+#if OPT_A2
+// For process states
+typedef enum proc_state {
+	ALIVE,
+	DEAD
+} pstate;
+#endif
+
 /*
  * Process structure.
  */
 struct proc {
 	char *p_name;			/* Name of this process */
+#if OPT_A2
+	struct lock* p_lock;
+#else
 	struct spinlock p_lock;		/* Lock for this structure */
+#endif
 	struct threadarray p_threads;	/* Threads in this process */
 
 	/* VM */
@@ -77,8 +88,14 @@ struct proc {
 	// points to parent process
 	// if parent, NULL (only set in fork() )
 	struct proc* p_parent;
+	// list of children
+	struct array* p_children;
 	// CV for wait & exit (every child is a potential parent)
 	struct cv* p_cv;
+	// current state of the process
+	pstate p_state;
+	// when exit, save for parent
+	int exit_status;
 #endif // OPT_A2
 };
 
@@ -91,36 +108,15 @@ extern struct semaphore *no_proc_sem;
 #endif // UW
 
 #if OPT_A2
-// For process states
-typedef enum proc_state {
-	ALIVE,
-	ZOMBIE,
-	DEAD
-} pstate;
-
-// PCB: process tracer
-struct proc_info {
-	// parent id
-	pid_t p_id;
-	// parent process id
-	pid_t pp_id;
-	// exit status
-	int exit_status;
-	// state
-	pstate state;
-	// pointer to cv...bad way! (needed for waitpid)
-	struct cv* p_cv;
-};
-
 // master lock for mutual exclusion
-extern struct lock* p_lock;
-// When used pid is returned
-extern struct array* reusable_pids;
-// array of all processes' proc info
+extern struct lock* p_table_lock;
+// array of all processes
 // CREATE: when proc is created
-// DELETE: when proc is safe to be forgotten
-//         (NOT deleted when proc is destroyed!)
+// DELETE: when proc is safe to be deleted
 extern struct array* p_table;
+// return proc corresponding to pid
+// used in wait
+struct proc* getProc(struct array* procs, pid_t pid);
 #endif
 
 /* Call once during system startup to allocate data structures. */
