@@ -89,16 +89,7 @@ void sys__exit(int exitcode) {
   proc_remthread(curthread);
 
 #if OPT_A2
-  // mark proc as dead
-  p->p_state = DEAD;
-  // save for parent wait
-  p->exit_status = _MKWAIT_EXIT(exitcode);
-  // wake up parent
   lock_acquire(p->p_cv_lock);
-  cv_broadcast(p->p_cv, p->p_cv_lock);
-  lock_release(p->p_cv_lock);
-
-  spinlock_acquire(&p->p_lock);
   // clean up ZOMBIE children (DEAD but allocated)
   for (unsigned int i = 0; i < array_num(p->p_children); i++) {
     struct proc* child = array_get(p->p_children, i);
@@ -108,10 +99,17 @@ void sys__exit(int exitcode) {
       proc_destroy(child);
       // array_remove(p->p_children, i);
       // since p->children is now mutated
-      i--;
+      // i--;
     }
   }
-  spinlock_release(&p->p_lock);
+  // mark proc as dead
+  p->p_state = DEAD;
+  // save for parent wait
+  p->exit_status = _MKWAIT_EXIT(exitcode);
+  // wake up parent
+  cv_broadcast(p->p_cv, p->p_cv_lock);
+
+  lock_release(p->p_cv_lock);
 
   // find parent first
   lock_acquire(p_table_lock);
