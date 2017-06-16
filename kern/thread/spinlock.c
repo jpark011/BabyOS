@@ -58,7 +58,7 @@ spinlock_init(struct spinlock *lk)
 void
 spinlock_cleanup(struct spinlock *lk)
 {
-	DEBUG(DEBUG_EXEC, "holder: %p\n", lk->lk_holder);
+	DEBUG(DB_EXEC, "holder: %p\n", lk->lk_holder);
 	KASSERT(lk->lk_holder == NULL);
 	KASSERT(spinlock_data_get(&lk->lk_lock) == 0);
 }
