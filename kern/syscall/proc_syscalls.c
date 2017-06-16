@@ -97,20 +97,20 @@ void sys__exit(int exitcode) {
   // wake up parent
   cv_broadcast(p->p_cv, p->p_cv_lock);
 
+  lock_acquire(p->p_cv_lock);
   // clean up ZOMBIE children (DEAD but allocated)
   for (unsigned int i = 0; i < array_num(p->p_children); i++) {
     struct proc* child = array_get(p->p_children, i);
 
     // is ZOMBIE?
     if (child->p_state == DEAD) {
-      lock_acquire(p->p_cv_lock);
       proc_destroy(child);
-      lock_release(p->p_cv_lock);
       array_remove(p->p_children, i);
       // since p->children is now mutated
       i--;
     }
   }
+  lock_release(p->p_cv_lock);
 
   // find parent first
   lock_acquire(p_table_lock);
