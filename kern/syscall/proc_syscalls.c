@@ -18,37 +18,6 @@
   /* this needs to be fixed to get exit() and waitpid() working properly */
 #if OPT_A2
 
-// return proc_info OR NULL if not found
-static
-struct proc_info* findProcInfo(struct array* proc_infos, pid_t pid) {
-  struct proc_info* ret = NULL;
-
-  for (unsigned int i = 0; i < array_num(proc_infos); i++) {
-    struct proc_info* now = (struct proc_info*)array_get(proc_infos, i);
-    if (now->p_id == pid) {
-      ret = now;
-      break;
-    }
-  }
-  return ret;
-}
-
-// return index of (proc_info) or -1 if not found
-static
-int getIndex(struct array* proc_infos, pid_t pid) {
-  int ret = -1;
-
-  for (unsigned int i = 0; i < array_num(proc_infos); i++) {
-    struct proc_info* now = (struct proc_info*)array_get(proc_infos, i);
-    if (now->p_id == pid) {
-      ret = i;
-      break;
-    }
-  }
-  return ret;
-}
-
-
 int sys_fork(struct trapframe* tf, pid_t* retVal) {
     int err;
     // TODO: Should I save curproc into a var with lock???
