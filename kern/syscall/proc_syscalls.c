@@ -43,9 +43,9 @@ int sys_fork(struct trapframe* tf, pid_t* retVal) {
     // relate to parent
     child_p->p_parent = curproc;
     // relate to children
-    spinlock_acquire(curproc->p_lock);
+    spinlock_acquire(&curproc->p_lock);
     array_add(curproc->p_children, child_p, NULL);
-    spinlock_release(curproc->p_lock);
+    spinlock_release(&curproc->p_lock);
 
     // attach a new thread
     err = thread_fork(child_p->p_name,
@@ -94,7 +94,7 @@ void sys__exit(int exitcode) {
   // save for parent wait
   p->exit_status = _MKWAIT_EXIT(exitcode);
 
-  spinlock_acquire(p->p_lock);
+  spinlock_acquire(&p->p_lock);
   // clean up ZOMBIE children (DEAD but allocated)
   for (unsigned int i = 0; i < array_num(p->p_children); i++) {
     lock_acquire(p_table_lock);
@@ -109,8 +109,8 @@ void sys__exit(int exitcode) {
       i--;
     }
   }
-  spinlock_release(p->p_lock);
-  
+  spinlock_release(&p->p_lock);
+
   // self destruct only when parent DNE or DEAD
   if (p->p_parent == NULL || p->p_parent->p_state == DEAD) {
     proc_destroy(p);
