@@ -85,8 +85,8 @@ struct proc {
 #if OPT_A2
 	pid_t p_id;
 	// points to parent process
-	// if parent, NULL (only set in fork() )
-	struct proc* p_parent;
+	// DEFAULT: 0?
+ 	pid_t p_pid;
 	// list of children
 	struct array* p_children;
 	// CV for wait & exit (every child is a potential parent)

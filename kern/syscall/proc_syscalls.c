@@ -41,7 +41,7 @@ int sys_fork(struct trapframe* tf, pid_t* retVal) {
     memcpy(child_tf, tf, sizeof(struct trapframe));
 
     // relate to parent
-    child_p->p_parent = curproc;
+    child_p->p_pid = curproc->p_id;
     // relate to children
     spinlock_acquire(&curproc->p_lock);
     array_add(curproc->p_children, child_p, NULL);
@@ -113,8 +113,12 @@ void sys__exit(int exitcode) {
   }
   spinlock_release(&p->p_lock);
 
+  // find parent first
+  lock_acquire(p_table_lock);
+  struct proc* parent = getProc(p_table, p->p_pid);
+  lock_release(p_table_lock);
   // self destruct only when parent DNE or DEAD
-  if (p->p_parent == NULL || p->p_parent->p_state == DEAD) {
+  if (parent == NULL || parent->p_state == DEAD) {
     proc_destroy(p);
   }
 #else
@@ -180,7 +184,7 @@ sys_waitpid(pid_t pid,
     panic("no such process exists!");
     return ESRCH;
     // TODO: can we just compare curproc == found->parent??
-  } else if (curproc != child->p_parent) {
+  } else if (curproc->p_id != child->p_pid) {
     panic("no child exists!");
     return ECHILD;
   }
