@@ -90,7 +90,7 @@ void sys__exit(int exitcode) {
 
 #if OPT_A2
 
-  spinlock_acquire(&p->p_lock);
+  lock_acquire(p->p_cv_lock);
   // mark proc as dead
   p->p_state = DEAD;
   // save for parent wait
@@ -111,7 +111,7 @@ void sys__exit(int exitcode) {
       i--;
     }
   }
-  spinlock_release(&p->p_lock);
+  lock_release(p->p_cv_lock);
 
   // find parent first
   lock_acquire(p_table_lock);
