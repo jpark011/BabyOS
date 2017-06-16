@@ -96,7 +96,7 @@ void sys__exit(int exitcode) {
   // wake up parent
   lock_acquire(p->p_cv_lock);
   cv_broadcast(p->p_cv, p->p_cv_lock);
-  lock_rlease(p->p_cv_lock);
+  lock_release(p->p_cv_lock);
 
   spinlock_acquire(&p->p_lock);
   // clean up ZOMBIE children (DEAD but allocated)
