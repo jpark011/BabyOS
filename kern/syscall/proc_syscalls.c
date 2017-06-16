@@ -46,7 +46,7 @@ int sys_fork(struct trapframe* tf, pid_t* retVal) {
     array_add(curproc->p_children, child_p, NULL);
 
     // attach a new thread
-    err = thread_fork(child_p->p_name),
+    err = thread_fork(child_p->p_name,
                       child_p,
                       (void*)enter_forked_process, child_tf, 0);
     if (err) {
