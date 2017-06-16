@@ -99,9 +99,7 @@ void sys__exit(int exitcode) {
   spinlock_acquire(&p->p_lock);
   // clean up ZOMBIE children (DEAD but allocated)
   for (unsigned int i = 0; i < array_num(p->p_children); i++) {
-    lock_acquire(p_table_lock);
     struct proc* child = array_get(p->p_children, i);
-    lock_release(p_table_lock);
 
     // is ZOMBIE?
     if (child->p_state == DEAD) {
