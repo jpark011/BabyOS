@@ -95,7 +95,7 @@ array_num(const struct array *a)
 ARRAYINLINE void *
 array_get(const struct array *a, unsigned index)
 {
-	DEBUG(DB_EXEC, "index: %d, a->num: %d", index, a->num);
+	DEBUG(DB_EXEC, "index: %d, a->num: %d\n", index, a->num);
 	ARRAYASSERT(index < a->num);
 	return a->v[index];
 }
