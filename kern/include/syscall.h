@@ -64,6 +64,7 @@ int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
 int sys_write(int fdesc,userptr_t ubuf,unsigned int nbytes,int *retval);
 #if OPT_A2
 int sys_fork(struct trapframe* tf, pid_t* retVal);
+int sys_execv(userptr_t progname, userptr_t args);
 #endif // OPT_A2
 void sys__exit(int exitcode);
 int sys_getpid(pid_t *retval);
