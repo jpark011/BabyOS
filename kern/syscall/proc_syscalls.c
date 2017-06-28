@@ -3,6 +3,7 @@
 #include <kern/unistd.h>
 #include <kern/wait.h>
 #include <kern/fcntl.h>
+#include <limits.h>
 #include <mips/trapframe.h>
 #include <lib.h>
 #include <syscall.h>
@@ -23,13 +24,22 @@
 
 // A02b
 int sys_execv(userptr_t progname) {
-  struct addrspace *as;
+  struct addrspace *as, *old_as;
   struct vnode *v;
   vaddr_t entrypoint, stackptr;
   int result;
-  char* progname_kernel = kmalloc(10);
+  // unknown for now
+  size_t progname_length;
+  char* progname_kernel = kmalloc(PATH_MAX);
+  if (progname_kernel == NULL) {
+    return ENOMEM;
+  }
 
-  (void)progname;
+  // copy progname from user to kernel
+  result = copyinstr((const_userptr_t)progname, progname_kernel, PATH_MAX, &progname_length);
+  if (result) {
+    return result;
+  }
 
   /* Open the file. */
   result = vfs_open(progname_kernel, O_RDONLY, 0, &v);
@@ -45,15 +55,16 @@ int sys_execv(userptr_t progname) {
   }
 
   /* Switch to it and activate it. */
-  // and destory old one
-  as = curproc_setas(as);
-  as_destroy(as);
+
+  old_as = curproc_setas(as);
   as_activate();
 
   /* Load the executable. */
   result = load_elf(v, &entrypoint);
   if (result) {
-  	/* p_addrspace will go away when curproc is destroyed */
+    // back to old_as and free as
+    curproc_setas(old_as);
+    as_destroy(as);
   	vfs_close(v);
   	return result;
   }
@@ -61,12 +72,18 @@ int sys_execv(userptr_t progname) {
   /* Done with the file now. */
   vfs_close(v);
 
+  // NEEED to copy args...
   /* Define the user stack in the address space */
   result = as_define_stack(as, &stackptr);
   if (result) {
-  	/* p_addrspace will go away when curproc is destroyed */
+    // back to old_as and free as
+    curproc_setas(old_as);
+    as_destroy(as);
   	return result;
   }
+
+  // destory old address sapce
+  as_destroy(old_as);
 
   /* Warp to user mode. */
   enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
