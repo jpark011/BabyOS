@@ -32,6 +32,15 @@ static void kfree_args(char** argv, size_t argc) {
   argv = NULL;
 }
 
+// free as and roll-back to previous as
+static void as_destroy_and_rollback(struct addrspace* cur, struct addrspace* prev) {
+  // back to old_as and free as
+  // as_deactivate();
+  curproc_setas(prev);
+  as_activate();
+  as_destroy(cur);
+}
+
 // A02b
 int sys_execv(userptr_t progname, userptr_t args) {
   struct addrspace *as, *old_as;
@@ -51,14 +60,30 @@ int sys_execv(userptr_t progname, userptr_t args) {
 
   // allocate mem ( +1 for NULL ended)
   argv = (char**)kmalloc((argc + 1) * sizeof(char*));
+  if (argv == NULL) {
+    return ENOMEM;
+  }
 
   // copy argument strings
   for (size_t i = 0; i < argc; i++) {
     size_t argument_length;
-    argv[i] = (char*)kmalloc(NAME_MAX * sizeof(char));
-    copyinstr((const_userptr_t)((char**)args)[i], argv[i], NAME_MAX, &argument_length);
+    argv[i] = (char*)kmalloc(PATH_MAX * sizeof(char));
+    if (argv[i] == NULL) {
+      return ENOMEM;
+    }
+
+    result = copyinstr((const_userptr_t)((char**)args)[i], argv[i], PATH_MAX, &argument_length);
+    if (result) {
+      return result;
+    }
   }
   argv[argc] = NULL;
+
+  #if DEBUG
+    for (size_t i = 0; i < argc; i++) {
+      kprintf("Argument #%d: %s\n", i, argv[i]);
+    }
+  #endif
 
   // program name parameters... unknown for now
   size_t progname_length;
@@ -88,6 +113,7 @@ int sys_execv(userptr_t progname, userptr_t args) {
   /* Create a new address space. */
   as = as_create();
   if (as ==NULL) {
+    kfree_args(argv, argc);
   	vfs_close(v);
   	return ENOMEM;
   }
@@ -99,10 +125,8 @@ int sys_execv(userptr_t progname, userptr_t args) {
   /* Load the executable. */
   result = load_elf(v, &entrypoint);
   if (result) {
-    // back to old_as and free as
-    curproc_setas(old_as);
-    as_activate();
-    as_destroy(as);
+    kfree_args(argv, argc);
+    as_destroy_and_rollback(as, old_as);
   	vfs_close(v);
   	return result;
   }
@@ -110,22 +134,64 @@ int sys_execv(userptr_t progname, userptr_t args) {
   /* Done with the file now. */
   vfs_close(v);
 
-  // NEEED to copy args...
   /* Define the user stack in the address space */
   result = as_define_stack(as, &stackptr);
   if (result) {
-    // back to old_as and free as
-    curproc_setas(old_as);
-    as_activate();
-    as_destroy(as);
+    kfree_args(argv, argc);
+    as_destroy_and_rollback(as, old_as);
   	return result;
   }
+
+  // starting from the bottom of the stack
+  // stack up the following order:
+  // 1. strings
+  // 2. pointers to the strings (should be padded)
+  // *********************************************
+  for (size_t i = 0; i < argc; i++) {
+    // reverse order
+    size_t r = (argc - 1) - i;
+    // + 1 for NULL terminator
+    size_t arg_size = sizeof(char) * (strlen((const char*)argv[r]) + 1);
+    // stack grows downward
+    // almost like push_stack
+    // copy into stack
+    stackptr -= arg_size;
+    result = copyoutstr((const char*)argv[r], (userptr_t)stackptr, PATH_MAX, &arg_size);
+    if (result) {
+      kfree_args(argv, argc);
+      as_destroy_and_rollback(as, old_as);
+    	return result;
+    }
+    // free kernel strings (since they are now on user stack)
+    kfree(argv[r]);
+    // save top of stack address
+    argv[r] = (char*)stackptr;
+  }
+
+  // pointers should be padded (but 4 or 8 bytes???)
+  size_t aligned_size = ROUNDUP(sizeof(char*), 4);
+  // copy pointers to strings
+  for (size_t i = 0; i < argc; i++) {
+    // reverse order (starting from NULL terminator)
+    size_t r = argc - i;
+    // push_stack
+    // copy into stack
+    stackptr -= aligned_size;
+    copyout(argv + r, (userptr_t)stackptr, aligned_size);
+    if (result) {
+      as_destroy_and_rollback(as, old_as);
+    	return result;
+    }
+  }
+
+  // free args, no logner need them
+  kfree_args(argv, argc);
 
   // destory old address sapce
   as_destroy(old_as);
 
   /* Warp to user mode. */
-  enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
+  enter_new_process(argc, (userptr_t)stackptr,
   		  stackptr, entrypoint);
 
   /* enter_new_process does not return. */
