@@ -22,6 +22,16 @@
   /* this needs to be fixed to get exit() and waitpid() working properly */
 #if OPT_A2
 
+// free arguments!
+static void kfree_args(char** argv, size_t argc) {
+  for (size_t i = 0; i < argc; i++) {
+    kfree(argv[i]);
+    argv[i] = NULL;
+  }
+  kfree(argv);
+  argv = NULL;
+}
+
 // A02b
 int sys_execv(userptr_t progname, userptr_t args) {
   struct addrspace *as, *old_as;
@@ -29,34 +39,39 @@ int sys_execv(userptr_t progname, userptr_t args) {
   vaddr_t entrypoint, stackptr;
   int result;
   // args parameters...
-  int argc = 0;
-  char** argv = kmalloc(ARG_MAX);
+  size_t argc = 0;
+  char** argv;
 
-  // program name parameters... unknown for now
-  size_t progname_length;
-  char* progname_kernel = kmalloc(PATH_MAX);
-  if (progname_kernel == NULL) {
-    return ENOMEM;
-  }
-
-  // count number of arguments
-  while (1) {
-    char* arg_temp = NULL;
-    copyin((const_userptr_t)args + argc * sizeof(char*), &arg_temp, sizeof(char*));
-    argv[argc] = arg_temp;
-    if (arg_temp == NULL) {
-        break;
-    }
-    argc++;
-  }
+  // count # arguments
+  while ( ((char**)args)[argc] != NULL ) argc++;
   // too many arguments
   if (argc > ARG_MAX / PATH_MAX) {
     return E2BIG;
   }
 
+  // allocate mem ( +1 for NULL ended)
+  argv = (char**)kmalloc((argc + 1) * sizeof(char*));
+
+  // copy argument strings
+  for (size_t i = 0; i < argc; i++) {
+    size_t argument_length;
+    argv[i] = (char*)kmalloc(NAME_MAX * sizeof(char));
+    copyinstr((const_userptr_t)((char**)args)[i], argv[i], NAME_MAX, &argument_length);
+  }
+  argv[argc] = NULL;
+
+  // program name parameters... unknown for now
+  size_t progname_length;
+  char* progname_kernel = (char*)kmalloc(PATH_MAX * sizeof(char));
+  if (progname_kernel == NULL) {
+    kfree_args(argv, argc);
+    return ENOMEM;
+  }
+
   // copy progname from user to kernel
   result = copyinstr((const_userptr_t)progname, progname_kernel, PATH_MAX, &progname_length);
   if (result) {
+    kfree_args(argv, argc);
     kfree(progname_kernel);
     return result;
   }
@@ -66,6 +81,7 @@ int sys_execv(userptr_t progname, userptr_t args) {
   result = vfs_open(progname_kernel, O_RDONLY, 0, &v);
   kfree(progname_kernel);   // don't need anymore.... right...?
   if (result) {
+    kfree_args(argv, argc);
     return result;
   }
 
