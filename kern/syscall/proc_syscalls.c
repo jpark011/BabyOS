@@ -151,13 +151,16 @@ int sys_execv(userptr_t progname, userptr_t args) {
     // reverse order
     size_t r = (argc - 1) - i;
     // + 1 for NULL terminator
-    size_t arg_size = sizeof(char) * (strlen((const char*)argv[r]) + 1);
+    // Easier if all strings are blocks of 4
+    size_t arg_size = ROUNDUP(sizeof(char) * (strlen((const char*)argv[r]) + 1),
+                              4);
     // stack grows downward
     // almost like push_stack
     // copy into stack
     stackptr -= arg_size;
     result = copyoutstr((const char*)argv[r], (userptr_t)stackptr, PATH_MAX, &arg_size);
     if (result) {
+      // can conflict when there are mix of kernel & user pointers
       kfree_args(argv, argc);
       as_destroy_and_rollback(as, old_as);
     	return result;
@@ -169,23 +172,24 @@ int sys_execv(userptr_t progname, userptr_t args) {
   }
 
   // pointers should be padded (but 4 or 8 bytes???)
-  size_t aligned_size = ROUNDUP(sizeof(char*), 4);
+  // size_t aligned_size = ROUNDUP(sizeof(char*), 4);
   // copy pointers to strings
-  for (size_t i = 0; i < argc; i++) {
+  for (size_t i = 0; i <= argc; i++) {
     // reverse order (starting from NULL terminator)
     size_t r = argc - i;
     // push_stack
     // copy into stack
-    stackptr -= aligned_size;
-    copyout(argv + r, (userptr_t)stackptr, aligned_size);
+    stackptr -= sizeof(char*);
+    copyout(argv + r, (userptr_t)stackptr, sizeof(char*));
     if (result) {
       as_destroy_and_rollback(as, old_as);
     	return result;
     }
   }
 
-  // free args, no logner need them
-  kfree_args(argv, argc);
+  // free args, no logner need to
+  // since they are all freed in the for-loop
+  // kfree_args(argv, argc);
 
   // destory old address sapce
   as_destroy(old_as);
