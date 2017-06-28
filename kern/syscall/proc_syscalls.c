@@ -22,20 +22,20 @@
 #if OPT_A2
 
 // A02b
-int sys_execv(char* progname) {
+int sys_execv(userptr_t progname) {
   struct addrspace *as;
   struct vnode *v;
   vaddr_t entrypoint, stackptr;
   int result;
+  char* progname_kernel = kmalloc(10);
+
+  (void)progname;
 
   /* Open the file. */
-  result = vfs_open(progname, O_RDONLY, 0, &v);
+  result = vfs_open(progname_kernel, O_RDONLY, 0, &v);
   if (result) {
     return result;
   }
-
-  /* We should be a new process. */
-  KASSERT(curproc_getas() == NULL);
 
   /* Create a new address space. */
   as = as_create();
@@ -45,7 +45,9 @@ int sys_execv(char* progname) {
   }
 
   /* Switch to it and activate it. */
-  curproc_setas(as);
+  // and destory old one
+  as = curproc_setas(as);
+  as_destroy(as);
   as_activate();
 
   /* Load the executable. */
