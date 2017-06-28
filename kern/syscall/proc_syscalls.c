@@ -23,26 +23,48 @@
 #if OPT_A2
 
 // A02b
-int sys_execv(userptr_t progname) {
+int sys_execv(userptr_t progname, userptr_t args) {
   struct addrspace *as, *old_as;
   struct vnode *v;
   vaddr_t entrypoint, stackptr;
   int result;
-  // unknown for now
+  // args parameters...
+  int argc = 0;
+  char** argv = kmalloc(ARG_MAX);
+
+  // program name parameters... unknown for now
   size_t progname_length;
   char* progname_kernel = kmalloc(PATH_MAX);
   if (progname_kernel == NULL) {
     return ENOMEM;
   }
 
+  // count number of arguments
+  while (1) {
+    char* arg_temp = NULL;
+    copyin((const_userptr_t)args + argc * sizeof(char*), &arg_temp, sizeof(char*));
+    argv[argc] = arg_temp;
+    if (arg_temp == NULL) {
+        break;
+    }
+    argc++;
+  }
+  // too many arguments
+  if (argc > ARG_MAX / PATH_MAX) {
+    return E2BIG;
+  }
+
   // copy progname from user to kernel
   result = copyinstr((const_userptr_t)progname, progname_kernel, PATH_MAX, &progname_length);
   if (result) {
+    kfree(progname_kernel);
     return result;
   }
+  DEBUG(DB_SYSCALL, "copied program name: %s, length: %d\n", progname_kernel, progname_length);
 
   /* Open the file. */
   result = vfs_open(progname_kernel, O_RDONLY, 0, &v);
+  kfree(progname_kernel);   // don't need anymore.... right...?
   if (result) {
     return result;
   }
@@ -55,7 +77,6 @@ int sys_execv(userptr_t progname) {
   }
 
   /* Switch to it and activate it. */
-
   old_as = curproc_setas(as);
   as_activate();
 
@@ -64,6 +85,7 @@ int sys_execv(userptr_t progname) {
   if (result) {
     // back to old_as and free as
     curproc_setas(old_as);
+    as_activate();
     as_destroy(as);
   	vfs_close(v);
   	return result;
@@ -78,6 +100,7 @@ int sys_execv(userptr_t progname) {
   if (result) {
     // back to old_as and free as
     curproc_setas(old_as);
+    as_activate();
     as_destroy(as);
   	return result;
   }
