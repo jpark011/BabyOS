@@ -152,8 +152,8 @@ int sys_execv(userptr_t progname, userptr_t args) {
     size_t r = (argc - 1) - i;
     // + 1 for NULL terminator
     // Easier if all strings are blocks of 4
-    size_t arg_size = ROUNDUP(sizeof(char) * (strlen((const char*)argv[r]) + 1),
-                              4);
+    size_t arg_size = sizeof(char) * (strlen((const char*)argv[r]) + 1);
+
     // stack grows downward
     // almost like push_stack
     // copy into stack
@@ -172,7 +172,7 @@ int sys_execv(userptr_t progname, userptr_t args) {
   }
 
   // pointers should be padded (but 4 or 8 bytes???)
-  // size_t aligned_size = ROUNDUP(sizeof(char*), 4);
+  stackptr = ROUNDUP(stackptr, 4);
   // copy pointers to strings
   for (size_t i = 0; i <= argc; i++) {
     // reverse order (starting from NULL terminator)
