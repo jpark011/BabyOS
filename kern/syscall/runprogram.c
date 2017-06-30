@@ -101,7 +101,7 @@ runprogram(char *progname, char** argv, int argc)
 	char* argv_temp[64];
 	// copy argument strings onto as_stack
 	for (int i = 0; i < argc; i++) {
-		int r = argc - i;
+		int r = (argc - 1) - i;
 		// including NULL
 		size_t str_len = sizeof(char) * strlen(argv[r]) + 1;
 		stackptr -= str_len;
