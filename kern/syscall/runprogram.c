@@ -109,9 +109,8 @@ runprogram(char *progname, char** argv, int argc)
 		argv_temp[r] = (char*)stackptr;
 	}
 	argv_temp[argc] = NULL;
-	// alignment
-	stackptr = ROUNDUP(stackptr, 4);
-
+	// pointers should be padded (but 4 or 8 bytes???)
+	stackptr -= stackptr % 4;
 	// copy argument pointers onto as_stack
 	for (int i = 0; i <= argc; i++) {
 		int r = argc - i;
