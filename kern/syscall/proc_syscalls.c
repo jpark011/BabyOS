@@ -172,7 +172,7 @@ int sys_execv(userptr_t progname, userptr_t args) {
   }
 
   // pointers should be padded (but 4 or 8 bytes???)
-  stackptr -= stackptr % 4;
+  stackptr -= stackptr % 8;
   // copy pointers to strings
   for (size_t i = 0; i <= argc; i++) {
     // reverse order (starting from NULL terminator)

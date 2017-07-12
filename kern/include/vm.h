@@ -38,12 +38,39 @@
 
 
 #include <machine/vm.h>
+#include "opt-A3.h"
 
 /* Fault-type arguments to vm_fault() */
 #define VM_FAULT_READ        0    /* A read was attempted */
 #define VM_FAULT_WRITE       1    /* A write was attempted */
 #define VM_FAULT_READONLY    2    /* A write to a readonly page was attempted*/
 
+
+#if OPT_A3
+
+// struct for each frame
+struct Core {
+  // size = 0 => FREE now
+  unsigned long size;
+};
+
+// CoreMap struct
+struct CoreMap {
+  // would love to use static paddr_start
+  // but C...
+  // starting phys addr
+  paddr_t offset;
+  // # frames
+  unsigned long npages;
+  // data structures for each frames
+  struct Core* cores;
+  // when core mode
+  bool created;
+};
+
+extern struct CoreMap core_map;
+
+#endif
 
 /* Initialization function */
 void vm_bootstrap(void);

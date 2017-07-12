@@ -51,10 +51,62 @@
  */
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
+#if OPT_A3
+
+static uint32_t getLowWord(paddr_t paddr, bool is_read_only) {
+	uint32_t elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
+	if (is_read_only) {
+		elo &= ~TLBLO_DIRTY;
+	}
+	return elo;
+}
+
+static bool isBetween(vaddr_t src, vaddr_t lower, vaddr_t upper) {
+	return (lower <= src) && (src <= upper);
+}
+
+static void initCoreMap() {
+	for (unsigned int i=0; i < core_map.npages; i++) {
+		core_map.cores[i].size = 0;
+	}
+}
+
+static paddr_t mapAddr(unsigned long i) {
+	return core_map.offset + (paddr_t)(PAGE_SIZE * i);
+}
+
+// works?
+// offset, npages, cores, created
+struct CoreMap core_map = {0, 0, NULL, false};
+
+#endif
+
 void
 vm_bootstrap(void)
 {
-	/* Do nothing. */
+#if OPT_A3
+
+	paddr_t lo, hi;
+	// get Phys RAM after kernel
+	ram_getsize(&lo, &hi);
+	// init Core Map
+	// start of core maps
+	core_map.cores = (struct Core*)PADDR_TO_KVADDR(lo);
+	// # frames (incl. core map)
+	core_map.npages = (hi - lo) / PAGE_SIZE;
+	// update lo (top of core map)
+	lo += sizeof(struct Core) * core_map.npages;
+	// # frames (excl. core map)
+	core_map.npages = (hi - lo) / PAGE_SIZE;
+	// align to PAGE_SIZE if necessary
+	core_map.offset = (lo % PAGE_SIZE == 0)? lo : lo + PAGE_SIZE - lo % PAGE_SIZE;
+	// set every frame FREE
+	initCoreMap();
+	// flag down
+	core_map.created = true;
+
+#endif
+/* Do nothing. */
 }
 
 static
@@ -65,14 +117,69 @@ getppages(unsigned long npages)
 
 	spinlock_acquire(&stealmem_lock);
 
+#if OPT_A3
+
+	// time to alloc !!
+	if (core_map.created) {
+		unsigned int i,j;
+		bool found = false;
+
+		for (i = 0; i < core_map.npages; i++) {
+			// found an empty spot! (but not sure if it fits)
+			if (core_map.cores[i].size == 0) {
+
+				// iterate # pages requested
+				for (j = 0; j < npages; j++) {
+					// does NOT fit!
+					if (core_map.cores[i+j].size != 0) {
+						// skip
+						i += j;
+						break;
+					} else {
+						continue;
+					}
+				}
+
+				// found fitting space
+				if (j == npages) {
+					found = true;
+					// set each frame
+					for (j = 0; j < npages; j++) {
+						core_map.cores[i+j].size = npages;
+					}
+					// return addr
+					addr = mapAddr(i);
+					// done!
+					break;
+				} else {
+					continue;
+				}
+
+			}
+		}
+		// either success / fail!
+
+		// out of memory a.k.a. FAIL!
+		if (!found) {
+			panic("out of memory!");
+			spinlock_release(&stealmem_lock);
+			return ENOMEM;
+		}
+	// still in core map block
+	} else {
+		addr = ram_stealmem(npages);
+	}
+
+#else
 	addr = ram_stealmem(npages);
-	
+#endif
+
 	spinlock_release(&stealmem_lock);
 	return addr;
 }
 
 /* Allocate/free some kernel-space virtual pages */
-vaddr_t 
+vaddr_t
 alloc_kpages(int npages)
 {
 	paddr_t pa;
@@ -83,12 +190,51 @@ alloc_kpages(int npages)
 	return PADDR_TO_KVADDR(pa);
 }
 
-void 
+void
 free_kpages(vaddr_t addr)
 {
+#if OPT_A3
+	// core_map should be created?...
+	KASSERT(core_map.created);
+	unsigned int i, j;
+
+	spinlock_acquire(&stealmem_lock);
+
+	// search for the addr you want to free
+	for (i = 0; i < core_map.npages; i++) {
+		paddr_t core_p = mapAddr(i);
+		vaddr_t core_v = PADDR_TO_KVADDR(core_p);
+
+		// found address to free!
+		// match either phys or virt
+		if (core_v == addr || core_p == addr) {
+			// contiguous size to be removed
+			unsigned long size = core_map.cores[i].size;
+			// FREEEEEEEE
+			for (j = 0; j < size; j++) {
+				core_map.cores[i+j].size = 0;
+			}
+			// DONE!
+			break;
+		} else {
+			continue;
+		}
+
+	}
+
+	// NOT found (reach the end of frames)
+	// if (i == core_map.npages) {
+	// 	panic("cannot free invalid address!");
+	// 	spinlock_release(&stealmem_lock);
+	// }
+
+	spinlock_release(&stealmem_lock);
+
+#else
 	/* nothing - leak the memory. */
 
 	(void)addr;
+#endif
 }
 
 void
@@ -120,8 +266,13 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	switch (faulttype) {
 	    case VM_FAULT_READONLY:
+		#if OPT_A3
+				// kill curproc
+				return 1;
+		#else
 		/* We always create pages read-write, so we can't get this */
 		panic("dumbvm: got VM_FAULT_READONLY\n");
+		#endif
 	    case VM_FAULT_READ:
 	    case VM_FAULT_WRITE:
 		break;
@@ -193,16 +344,28 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			continue;
 		}
 		ehi = faultaddress;
-		elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
-		DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, paddr);
+		elo = getLowWord(paddr, isBetween(faultaddress, vbase1, vtop1) && as->is_loaded);
+		DEBUG(DB_VM, "dumbvm: On %d.. 0x%x -> 0x%x\n", i, faultaddress, paddr);
 		tlb_write(ehi, elo, i);
+	#ifdef DEBUG
+		tlb_read(&ehi, &elo, i);
+		DEBUG(DB_VM, "read %d.. 0x%x -> 0x%x\n", i, ehi, elo);
+	#endif
 		splx(spl);
 		return 0;
 	}
-
+#if OPT_A3
+	ehi = faultaddress;
+	elo = getLowWord(paddr, isBetween(faultaddress, vbase1, vtop1) && as->is_loaded);
+	DEBUG(DB_VM, "dumbvm(full): On %d.. 0x%x -> 0x%x\n", i, faultaddress, paddr);
+	tlb_random(ehi, elo);
+	splx(spl);
+	return 0;
+#else
 	kprintf("dumbvm: Ran out of TLB entries - cannot handle page fault\n");
 	splx(spl);
 	return EFAULT;
+#endif
 }
 
 struct addrspace *
@@ -221,12 +384,29 @@ as_create(void)
 	as->as_npages2 = 0;
 	as->as_stackpbase = 0;
 
+#if OPT_A3
+	as->is_loaded = false;
+#endif
+
 	return as;
 }
 
 void
 as_destroy(struct addrspace *as)
 {
+#if OPT_A3
+
+	// flush all frame struct
+	// is there better way?
+	// unsigned int i;
+	// for (i = 0; i < core_map.npages; i++) {
+	// 	core_map.cores[i].size = 0;
+	// }
+	free_kpages(as->as_pbase1);
+	free_kpages(as->as_pbase2);
+	free_kpages(as->as_stackpbase);
+
+#endif
 	kfree(as);
 }
 
@@ -264,7 +444,7 @@ int
 as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		 int readable, int writeable, int executable)
 {
-	size_t npages; 
+	size_t npages;
 
 	/* Align the region. First, the base... */
 	sz += vaddr & ~(vaddr_t)PAGE_FRAME;
@@ -327,7 +507,7 @@ as_prepare_load(struct addrspace *as)
 	if (as->as_stackpbase == 0) {
 		return ENOMEM;
 	}
-	
+
 	as_zero_region(as->as_pbase1, as->as_npages1);
 	as_zero_region(as->as_pbase2, as->as_npages2);
 	as_zero_region(as->as_stackpbase, DUMBVM_STACKPAGES);
@@ -338,7 +518,13 @@ as_prepare_load(struct addrspace *as)
 int
 as_complete_load(struct addrspace *as)
 {
+#if OPT_A3
+	// adtivate read-only & flush TLB
+	as->is_loaded = true;
+	as_activate();
+#else
 	(void)as;
+#endif
 	return 0;
 }
 
@@ -387,7 +573,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	memmove((void *)PADDR_TO_KVADDR(new->as_stackpbase),
 		(const void *)PADDR_TO_KVADDR(old->as_stackpbase),
 		DUMBVM_STACKPAGES*PAGE_SIZE);
-	
+
 	*ret = new;
 	return 0;
 }
