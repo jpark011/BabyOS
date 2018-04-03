@@ -7,6 +7,7 @@
 - System calls
   - __Process related:__ fork, exit, kill, getpid, execv
 - Memory manager
+  - TLB miss is handled randomly by the kernel (kick a random TLB entry)
   - There are 3 segments: coding, heap(data), and stack
   - Paging of size 4KB is used currently.
   
